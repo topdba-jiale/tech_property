@@ -1,0 +1,133 @@
+[client]
+port            = 3306
+socket          = /tmp/mysql.sock
+character-set-server =utf8
+
+[mysqld]
+port            = 3307
+user = mysql
+server-id=1
+default-storage-engine=innodb
+character-set-server =utf8
+collation_server = utf8_bin
+transaction_isolation = READ-COMMITTED
+skip-name-resolve
+federated
+gtid-mode=on
+enforce-gtid-consistency=1
+binlog_format=row
+sync_binlog=1  #crash-safe
+event_scheduler = 1
+lower_case_table_names=1
+init_connect='SET AUTOCOMMIT=1'
+sync-master-info=1
+#slave-parallel-workers=1
+binlog-checksum=CRC32
+master-verify-checksum=1
+slave-sql-verify-checksum=1
+binlog-rows-query-log-events=1
+explicit_defaults_for_timestamp
+sql_mode = "STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_AUTO_CREATE_USER"
+external-locking = FALSE
+log-bin-trust-function-creators=1
+open_files_limit=15000
+back_log = 1024
+performance_schema_max_table_instances=2000
+max_connections = 1024
+max_connect_errors =200
+max_user_connections=512
+connect_timeout=600
+wait_timeout=300
+interactive_timeout=300
+max_allowed_packet=1024M
+group_concat_max_len=1M
+ft_min_word_len=1 
+min_examined_row_limit = 100                    
+
+###################innodb settings###################
+innodb_autoinc_lock_mode=2
+innodb_buffer_pool_size=3G                                                                                                         
+innodb_log_file_size = 1024M
+innodb_log_files_in_group=3
+innodb_log_buffer_size = 8M
+innodb_data_file_path = ibdata1:1024M:autoextend 
+innodb_undo_logs = 128
+innodb_undo_tablespaces = 126
+innodb_io_capacity  =2000                 
+innodb_file_per_table
+innodb_flush_log_at_trx_commit = 1   #crash-safe
+innodb_support_xa=on #crash-safe
+innodb_print_all_deadlocks = 1  #default 0
+innodb_lock_wait_timeout =3 #default 50
+innodb_thread_concurrency=64
+innodb_read_io_threads=30 
+innodb_write_io_threads=30
+innodb_strict_mode=1
+innodb_flush_neighbors=1
+innodb_purge_threads=4 
+innodb_flush_method=O_DIRECT
+innodb_open_files=10240
+innodb_file_format = Barracuda
+innodb_file_format_max = Barracuda
+innodb_buffer_pool_instances = 4
+innodb_buffer_pool_load_at_startup = 1
+innodb_buffer_pool_dump_at_shutdown = 1
+innodb_rollback_on_timeout=on
+
+
+############file-name settings###################
+socket  = /tmp/mysql_blog.sock
+pid-file = /database/blog/data/blog.pid
+datadir = /database/blog/data/
+tmpdir=/database/blog/tmp
+log-bin=/database/blog/binlog/blog_bin
+log-error=/database/blog/data/blog.err 
+
+############log settings###################
+expire_logs_days =10
+slow_query_log=1
+slow_query_log_file = /database/blog/data/blog-slow.log
+long_query_time = 2
+log_output=table,file
+log_queries_not_using_indexes = 1
+
+############cache settings################### 
+max_binlog_cache_size =4G
+max_binlog_size = 1G
+binlog_cache_size =32M                         
+key_buffer_size =64M
+thread_stack = 256K
+sort_buffer_size = 2M
+tmp_table_size = 2M
+read_buffer_size = 2M
+join_buffer_size = 2M
+myisam_sort_buffer_size = 2M
+read_rnd_buffer_size = 8M
+#thread_cache = 32
+thread_cache_size = 128
+max_heap_table_size = 2M
+bulk_insert_buffer_size=256M
+net_buffer_length = 8K
+query_cache_size =0
+query_cache_type = 0
+
+
+############replication settings###################
+log-slave-updates                      
+relay-log-index = /database/blog/relaylog/blog-relay-bin.index
+relay-log-info-file = /database/blog/relaylog/blog-relay-bin
+relay-log = /database/blog/relaylog/blog-relay-log.info
+slave-skip-errors=all
+binlog-ignore-db=mysql 
+replicate-ignore-db=mysql 
+relay_log_recovery = 1 #replicate crash-safe
+master-info-repository=TABLE
+relay-log-info-repository=TABLE  #replicate crash-safe
+
+
+###################plugin settings###################
+plugin-load=validate_password.so
+validate-password=FORCE_PLUS_PERMANENT
+validate_password_policy=1
+
+

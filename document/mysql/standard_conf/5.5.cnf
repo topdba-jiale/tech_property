@@ -1,0 +1,113 @@
+[client]
+port            = 3306
+socket          = /tmp/mysql.sock
+default-character-set=utf8
+
+[mysqld]
+port            = 3307
+socket          = /tmp/mysql_csfz.sock
+user = mysql
+server-id=7
+skip-name-resolve
+federated
+external-locking = FALSE
+pid-file = /database/csfz/data/csfz.pid
+datadir = /database/csfz/data/
+log-bin=/database/csfz/binlog/csfz_bin
+log-error=/database/csfz/data/csfz.err
+tmpdir=/database/csfz/tmp
+                                                                                                                              
+expire_logs_days =7
+log-bin-trust-function-creators=1  
+sql_mode="STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+max_binlog_cache_size =4G
+max_binlog_size = 1G
+binlog_cache_size =32M
+
+relay-log-index = /database/csfz/relaylog/csfz-relay-bin.index
+relay-log-info-file = /database/csfz/relaylog/csfz-relay-bin
+relay-log = /database/csfz/relaylog/csfz-relay-log.info
+innodb_log_file_size = 256M
+innodb_log_files_in_group=3
+innodb_log_buffer_size = 32M
+innodb_file_per_table
+innodb_flush_log_at_trx_commit = 1
+innodb_lock_wait_timeout =50
+innodb_thread_concurrency=32
+thread_concurrency = 32
+innodb_read_io_threads=16 
+innodb_write_io_threads=16
+innodb_buffer_pool_size=15G
+innodb_flush_method=O_DIRECT
+innodb_data_file_path = ibdata1:1024M:autoextend 
+innodb_undo_logs = 128
+innodb_undo_tablespaces = 126
+innodb_autoinc_lock_mode = 1
+innodb_purge_threads=1
+innodb_io_capacity=2000
+innodb_open_files=65000
+innodb_rollback_on_timeout=on
+sync_binlog = 1
+sync_relay_log = 1
+sync_master_info = 1
+sync_relay_log_info = 1                                                                                                                         
+event_scheduler = 1
+lower_case_table_names=1
+group_concat_max_len=1M                                                                                                              
+binlog_format=row
+init_connect='SET AUTOCOMMIT=1'
+connect_timeout=600
+wait_timeout=600
+interactive_timeout=600
+net_read_timeout =300   
+net_write_timeout =300
+ft_min_word_len=1
+transaction_isolation = READ-COMMITTED
+default-storage-engine=innodb
+max_connections = 1024
+max_connect_errors =20
+max_user_connections=512
+max_allowed_packet=1024M
+open_files_limit=65000
+bulk_insert_buffer_size=256M                                                                                                                                
+log_output=table,file
+long_query_time = 2
+slow_query_log=1
+slow_query_log_file = /database/csfz/data/csfz-slow.log
+                            
+back_log = 512
+key_buffer_size =128M
+thread_stack = 256K
+table_cache = 1024
+sort_buffer_size = 4M
+read_buffer_size = 4M
+join_buffer_size = 4M
+net_buffer_length = 8K
+read_rnd_buffer_size = 1M         
+binlog-ignore-db=mysql
+replicate-ignore-db=mysql
+log-slave-updates
+slave-skip-errors=all
+myisam_sort_buffer_size = 1M
+thread_cache = 32
+thread_cache_size = 128
+query_cache_size =0
+query_cache_type = 0
+tmp_table_size = 4M
+max_heap_table_size = 2M
+
+[mysqldump]                                                                                                                         
+quick                                                                                                                               
+max_allowed_packet = 512M
+                                                                                                                                    
+[mysql]                                                                                                                             
+no-auto-rehash
+                                                                                                                                    
+[myisamchk]                                                                                                                         
+key_buffer_size = 4M
+sort_buffer_size = 1M
+read_buffer = 1M
+write_buffer = 1M
+                                                                                                                                    
+[mysqlhotcopy]
+interactive-timeout
