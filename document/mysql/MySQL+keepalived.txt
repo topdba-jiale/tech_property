@@ -1,0 +1,273 @@
+高可用环境搭建 MySQL主从+keepalived 实现故障自动切换。
+
+
+-- 演示环境 
+master:172.16.8.18
+slave:172.16.8.19
+VIP:172.16.8.20
+
+-- 搭建主从环境
+利用自动化安装脚本实现（忽略）
+
+
+
+-- 安装配置keepalived
+
+-- terminal1(172.16.8.18), terminal2 (172.16.8.19) 均需
+
+tar xzf keepalived-2.0.8.tar.gz 
+cd keepalived-2.0.8/
+yum -y install gcc* e2fsprogs-devel keyutils-libs-devel libsepol-devel libselinux-devel krb5-devel zlib-devel openssl-devel popt-devel libnfnetlink-devel
+./configure --prefix=/usr/local/keepalived 
+make && make install
+mkdir -p /etc/keepalived/logs
+cp /usr/local/keepalived/etc/keepalived/keepalived.conf /etc/keepalived/
+cp /usr/local/keepalived/sbin/keepalived /etc/init.d/
+cp /etc/keepalived/keepalived.conf /etc/keepalived/keepalived.conf.bak
+
+
+-- terminal1(172.16.8.18) 
+
+-- 编辑keepalived配置文件，如下
+[root@vm172-16-8-18 ~]# cat /etc/keepalived/keepalived.conf
+global_defs {
+   script_user root
+   enable_script_security
+}
+
+vrrp_script chk_mysql {
+    script "sh /etc/keepalived/check_mysql.sh" #检测MySQL服务脚本，自行编写。如下有实现代码，可复用。
+    interval 10
+}
+vrrp_instance VI_1 {
+    state BACKUP #主从均为backup模式
+    interface eth0
+    virtual_router_id 51
+    priority 100 #主服务优先级权重配置高于从库
+    advert_int 1
+    nopreempt #非抢占模式
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+        chk_mysql
+    }
+     
+    virtual_ipaddress {
+         172.16.8.20
+    }
+   unicast_src_ip 172.16.8.18 #单播模式，源地址
+   unicast_peer {
+      172.16.8.19  #单播模式，目标地址
+    }
+}
+
+-- 编辑MySQL检测脚本，如下（数据库连接配置根据实际情况编辑，亦可使用变量替换）
+[root@vm172-16-8-18 ~]# cat /etc/keepalived/check_mysql.sh 
+#!/bin/bash
+
+if [ `ps -ef|grep -w "$0"|grep -v "grep"|wc -l` -gt 2 ];then
+    exit 0
+fi 
+mysql_con='mysql -uroot -proot@qunje -S /tmp/mysql_3306.sock'
+error_log="/etc/keepalived/logs/check_mysql.err"
+ 
+
+function excute_query {
+    ${mysql_con} -e "select 1;" 2>> ${error_log}
+}
+ 
+
+function service_error {
+    echo -e "`date "+%F  %H:%M:%S"`    -----mysql service error，now stop keepalived-----" >> ${error_log}
+    systemctl stop keepalived &>> ${error_log}
+    echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+}
+ 
+
+function query_error {
+    echo -e "`date "+%F  %H:%M:%S"` -----query error, but mysql service ok, retry after 10s-----" >> ${error_log}
+    sleep 10
+    excute_query
+    if [ $? -ne 0 ];then
+        echo -e "`date "+%F  %H:%M:%S"`  -----still can't execute query-----" >> ${error_log}
+ 
+        echo -e "`date "+%F  %H:%M:%S"`    -----set read_only = 1 on DB1-----" >> ${error_log}
+        mysql_con -e "set global read_only = 1;" 2>> ${error_log}
+ 
+
+        echo -e "`date "+%F  %H:%M:%S"` -----kill current client thread-----" >> ${error_log}
+        rm -f /tmp/kill.sql &>/dev/null
+
+        mysql_con -e 'select concat("kill ",id,";") from  information_schema.PROCESSLIST where command="Query" or command="Execute" into outfile "/tmp/kill.sql";'
+        mysql_con -e "source /tmp/kill.sql"
+        sleep 2   
+     
+        echo -e "`date "+%F  %H:%M:%S"`    -----stop keepalived-----" >> ${error_log}
+        systemctl stop keepalived &>> ${error_log}
+    
+        echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+    else
+        echo -e "`date "+%F  %H:%M:%S"` -----query ok after 10s-----" >> ${error_log}
+        echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+    fi
+}
+ 
+
+excute_query
+if [ $? -ne 0 ];then
+    mysqladmin -uroot -proot@qunje -S /tmp/mysql_3306.sock status &>/dev/null
+    if [ $? -ne 0 ];then
+        service_error
+    else
+        query_error
+    fi
+fi
+
+
+
+-- 启动keepalived
+[root@vm172-16-8-18 ~]# systemctl start keepalived
+
+[root@vm172-16-8-18 ~]# ps -ef|grep keepalived |grep -v grep
+root     17331     1  0 14:28 ?        00:00:00 /usr/local/keepalived/sbin/keepalived -D
+root     17332 17331  0 14:28 ?        00:00:00 /usr/local/keepalived/sbin/keepalived -D
+[root@vm172-16-8-18 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether fa:16:3e:4e:f1:58 brd ff:ff:ff:ff:ff:ff
+    inet 172.16.8.18/23 brd 172.16.9.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet 172.16.8.20/32 scope global eth0
+       valid_lft forever preferred_lft forever
+
+
+
+
+
+-- terminal2(172.16.8.19) 
+-- 编辑keepalived配置文件，如下
+[root@vm172-16-8-19 ~]# cat /etc/keepalived/keepalived.conf
+global_defs {
+   script_user root
+   enable_script_security
+   }
+
+vrrp_script chk_mysql {
+    script "sh /etc/keepalived/check_mysql.sh" 
+    interval 10
+}
+vrrp_instance VI_1 {
+    state BACKUP   
+    interface eth0
+    virtual_router_id 51
+    priority 90
+    advert_int 1
+    nopreempt
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+        chk_mysql
+    }
+     
+    virtual_ipaddress {
+         172.16.8.20
+    }
+   unicast_src_ip 172.16.8.19 #单播模式，源地址
+   unicast_peer {
+      172.16.8.18   #单播模式，目标地址
+    }
+
+}
+
+
+-- 编辑MySQL检测脚本
+[root@vm172-16-8-19 ~]# cat /etc/keepalived/check_mysql.sh 
+#!/bin/bash
+
+if [ `ps -ef|grep -w "$0"|grep -v "grep"|wc -l` -gt 2 ];then
+    exit 0
+fi 
+mysql_con='mysql -uroot -proot@qunje -S /tmp/mysql_3306.sock'
+error_log="/etc/keepalived/logs/check_mysql.err"
+ 
+
+function excute_query {
+    ${mysql_con} -e "select 1;" 2>> ${error_log}
+}
+ 
+
+function service_error {
+    echo -e "`date "+%F  %H:%M:%S"`    -----mysql service error，now stop keepalived-----" >> ${error_log}
+    systemctl stop keepalived &>> ${error_log}
+    echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+}
+ 
+
+function query_error {
+    echo -e "`date "+%F  %H:%M:%S"` -----query error, but mysql service ok, retry after 10s-----" >> ${error_log}
+    sleep 10
+    excute_query
+    if [ $? -ne 0 ];then
+        echo -e "`date "+%F  %H:%M:%S"`  -----still can't execute query-----" >> ${error_log}
+ 
+        echo -e "`date "+%F  %H:%M:%S"`    -----set read_only = 1 on DB1-----" >> ${error_log}
+        mysql_con -e "set global read_only = 1;" 2>> ${error_log}
+ 
+
+        echo -e "`date "+%F  %H:%M:%S"` -----kill current client thread-----" >> ${error_log}
+        rm -f /tmp/kill.sql &>/dev/null
+
+        mysql_con -e 'select concat("kill ",id,";") from  information_schema.PROCESSLIST where command="Query" or command="Execute" into outfile "/tmp/kill.sql";'
+        mysql_con -e "source /tmp/kill.sql"
+        sleep 2   
+     
+        echo -e "`date "+%F  %H:%M:%S"`    -----stop keepalived-----" >> ${error_log}
+        systemctl stop keepalived &>> ${error_log}
+    
+        echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+    else
+        echo -e "`date "+%F  %H:%M:%S"` -----query ok after 10s-----" >> ${error_log}
+        echo -e "\n---------------------------------------------------------\n" >> ${error_log}
+    fi
+}
+ 
+
+excute_query
+if [ $? -ne 0 ];then
+    mysqladmin -uroot -proot@qunje -S /tmp/mysql_3306.sock status &>/dev/null
+    if [ $? -ne 0 ];then
+        service_error
+    else
+        query_error
+    fi
+fi
+
+-- 启动keepalived,并查看进程
+[root@vm172-16-8-19 ~]# systemctl start keepalived
+[root@vm172-16-8-19 ~]# ps -ef|grep keepalived
+root     13604     1  0 14:43 ?        00:00:00 /usr/local/keepalived/sbin/keepalived -D
+root     13605 13604  0 14:43 ?        00:00:00 /usr/local/keepalived/sbin/keepalived -D
+root     13616 10997  0 14:43 pts/0    00:00:00 grep --color=auto keepalived
+
+-- VIP未漂移，属于正常。（配置优先级）
+[root@vm172-16-8-19 ~]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether fa:16:3e:7d:c1:c0 brd ff:ff:ff:ff:ff:ff
+    inet 172.16.8.19/23 brd 172.16.9.255 scope global eth0
+       valid_lft forever preferred_lft forever
+
+-- 总结：
+1.如果两节点的上联交换机禁用了组播，则只能采用vrrp单播通告的方式。
+2.20秒内检测服务，网络，连接等异常后可完成整个切换过程。
+3.如服务均使用IP白名单，需设置防火墙配置。
