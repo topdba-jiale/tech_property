@@ -1,0 +1,110 @@
+
+-- 
+[root@192 ~]# sh sysbench.sh read-only direct_mysql root root@qunje 192.168.2.221 3307 jiale   
+sysbench command exists and version:1.0.20
+
+
+
+
+FATAL: MySQL error: 1461 "Can't create more than max_prepared_stmt_count statements (current value: 16382)"
+FATAL: `thread_init' function failed: /usr/local/share/sysbench/oltp_common.lua:284: SQL API error
+FATAL: mysql_stmt_prepare() failed
+
+
+mysql> show variables like 'max_prepared_stmt_count';
++-------------------------+-------+
+| Variable_name           | Value |
++-------------------------+-------+
+| max_prepared_stmt_count | 16382 |
++-------------------------+-------+
+1 row in set (0.00 sec)
+
+mysql> set global max_prepared_stmt_count=1048576;
+Query OK, 0 rows affected (0.00 sec)
+
+
+-- 
+[root@192 ~]# sh sysbench.sh read-only proxysql qjweb 123456 192.168.2.219 6033 jiale        
+sysbench command exists and version:1.0.20
+
+
+
+[root@192 ~]# sh sysbench.sh read-only direct_mysql root root@qunje 192.168.2.221 3307 jiale
+sysbench command exists and version:1.0.20
+
+
+
+[root@192 ~]# sh sysbench.sh analyse
+sysbench command exists and version:1.0.20
+scenario        server_name     bench_type      sb_threads      server_load     request_total   request_read    request_write   request_per_second      total_time      95_pct_time
+direct_mysql    192.168.2.221   read-only       4       1.27    598592  523768  0       1870.25 20.00   2.30
+direct_mysql    192.168.2.221   read-only       8       3.13    966688  845852  0       3020.21 20.00   2.76
+direct_mysql    192.168.2.221   read-only       24      8.71    952128  833112  0       2974.16 20.01   8.90
+direct_mysql    192.168.2.221   read-only       48      18.06   938176  820904  0       2929.79 20.01   31.94
+direct_mysql    192.168.2.221   read-only       64      26.47   940304  822766  0       2935.14 20.02   58.92
+direct_mysql    192.168.2.221   read-only       128     35.33   925920  810180  0       2886.72 20.05   147.61
+direct_mysql    192.168.2.221   read-only       256     57.44   912688  798602  0       2838.97 20.09   292.60
+proxysql        192.168.2.219   read-only       4       0.15    19608   17157   0       61.06   20.07   71.83
+proxysql        192.168.2.219   read-only       8       0.25    36088   31577   0       112.40  20.07   79.32
+proxysql        192.168.2.219   read-only       24      0.49    61040   53410   0       189.90  20.09   142.39
+proxysql        192.168.2.219   read-only       48      0.47    67888   59402   0       210.09  20.19   267.41
+proxysql        192.168.2.219   read-only       64      0.54    71408   62482   0       219.95  20.29   493.24
+proxysql        192.168.2.219   read-only       128     0.91    75264   65856   0       228.34  20.60   1013.60
+proxysql        192.168.2.219   read-only       256     0.84    75440   66010   0       222.15  21.22   2198.52
+
+
+mysql> select * from sysbench_record;
++----+--------------+---------------+------------+------------+-------------+---------------+--------------+---------------+--------------------+------------+-------------+
+| id | scenario     | server_name   | bench_type | sb_threads | server_load | request_total | request_read | request_write | request_per_second | total_time | 95_pct_time |
++----+--------------+---------------+------------+------------+-------------+---------------+--------------+---------------+--------------------+------------+-------------+
+|  1 | proxysql     | 192.168.2.219 | read-only  |          4 |        0.16 |         19520 |        17080 |             0 |              60.80 |      20.06 |       71.83 |
+|  2 | proxysql     | 192.168.2.219 | read-only  |          8 |        0.29 |         36192 |        31668 |             0 |             112.74 |      20.06 |       78.60 |
+|  3 | proxysql     | 192.168.2.219 | read-only  |          4 |        0.13 |         19696 |        17234 |             0 |              61.32 |      20.07 |       71.83 |
+|  4 | proxysql     | 192.168.2.219 | read-only  |          8 |        0.20 |         35984 |        31486 |             0 |             112.05 |      20.07 |       80.03 |
+|  5 | proxysql     | 192.168.2.219 | read-only  |         24 |        0.49 |         61040 |        53410 |             0 |             189.90 |      20.09 |      142.39 |
+|  6 | proxysql     | 192.168.2.219 | read-only  |         48 |        0.47 |         67888 |        59402 |             0 |             210.09 |      20.19 |      267.41 |
+|  7 | proxysql     | 192.168.2.219 | read-only  |         64 |        0.54 |         71408 |        62482 |             0 |             219.95 |      20.29 |      493.24 |
+|  8 | proxysql     | 192.168.2.219 | read-only  |        128 |        0.91 |         75264 |        65856 |             0 |             228.34 |      20.60 |     1013.60 |
+|  9 | proxysql     | 192.168.2.219 | read-only  |        256 |        0.84 |         75440 |        66010 |             0 |             222.15 |      21.22 |     2198.52 |
+| 10 | direct_mysql | 192.168.2.221 | read-only  |          4 |        1.27 |        598592 |       523768 |             0 |            1870.25 |      20.00 |        2.30 |
+| 11 | direct_mysql | 192.168.2.221 | read-only  |          8 |        3.13 |        966688 |       845852 |             0 |            3020.21 |      20.00 |        2.76 |
+| 12 | direct_mysql | 192.168.2.221 | read-only  |         24 |        8.71 |        952128 |       833112 |             0 |            2974.16 |      20.01 |        8.90 |
+| 13 | direct_mysql | 192.168.2.221 | read-only  |         48 |       18.06 |        938176 |       820904 |             0 |            2929.79 |      20.01 |       31.94 |
+| 14 | direct_mysql | 192.168.2.221 | read-only  |         64 |       26.47 |        940304 |       822766 |             0 |            2935.14 |      20.02 |       58.92 |
+| 15 | direct_mysql | 192.168.2.221 | read-only  |        128 |       35.33 |        925920 |       810180 |             0 |            2886.72 |      20.05 |      147.61 |
+| 16 | direct_mysql | 192.168.2.221 | read-only  |        256 |       57.44 |        912688 |       798602 |             0 |            2838.97 |      20.09 |      292.60 |
++----+--------------+---------------+------------+------------+-------------+---------------+--------------+---------------+--------------------+------------+-------------+
+16 rows in set (0.00 sec)
+
+
+[root@192 ~]# sh sysbench.sh chart
+sysbench command exists and version:1.0.20
+
+
+
+[root@192 tmp]# ll /tmp/
+总用量 53228
+-rw-r--r--. 1 root          root          10675310 6月   1 17:34 20200529-znyzdbnew.sql
+-rw-r--r--. 1 root          root              7456 6月   9 17:17 95_pct_time.png
+-rw-r--r--. 1 root          root               570 6月   9 17:17 direct_mysql.dat
+-rw-r--r--. 1 root          root             37263 6月   1 20:58 engine_innodb_status.log
+drwxr-xr-x. 2 elasticsearch elasticsearch       19 5月   9 18:28 hsperfdata_elasticsearch
+drwxr-xr-x. 2 root          root                19 5月  29 17:20 hsperfdata_root
+srwx------. 1 root          root                 0 5月  11 08:43 mongodb-27017.sock
+srwxrwxrwx. 1 mysql         mysql                0 4月  27 13:41 mysql_3306.sock
+srwxrwxrwx. 1 mysql         mysql                0 4月  27 13:43 mysql_3307.sock
+srwxrwxrwx. 1 mysql         mysql                0 4月  27 13:43 mysql_3308.sock
+srwxrwxrwx. 1 mysql         mysql                0 4月  27 13:43 mysql_3309.sock
+srwxrwxrwx. 1 mysql         mysql                0 5月  26 17:15 mysql_3310.sock
+-rw-r--r--. 1 root          root              1232 6月   9 17:17 mysql_oltp.dat
+-rw-r--r--. 1 root          root                81 6月   9 17:17 mysql_oltp.log
+-rw-r--r--. 1 root          root               524 6月   9 17:17 proxysql.dat
+-rw-r--r--. 1 root          root              6908 6月   9 17:17 request_per_second.png
+-rw-r--r--. 1 root          root              7878 6月   9 17:17 total_time.png
+
+
+[root@192 tmp]# sz -be request_per_second.png
+
+
+
+
