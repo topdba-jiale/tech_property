@@ -1,0 +1,91 @@
+-- 监控数据库元数据变更
+
+[root@dbserver220 tmp]# more /root/check_meta_change.sh 
+
+#!/bin/bash
+
+datetime=`date "+%Y%m%d%H%M"`
+
+port=$1
+
+user="root"
+
+passwd="mychebao"
+
+mysql=`which mysql`
+
+#socket=`ps -ef|grep socket |grep -v grep  |awk '{print $(NF-1)}' |awk -F'=' '{print $2}'`
+
+tab_list_file=/tmp/table_list_${port}.lst
+
+
+
+if [ ! -f "${tab_list_file}" ]; then
+	$mysql -u$user -p$passwd -h127.0.0.1 -P${port} -Dinformation_schema -e "select concat(a.table_schema,'.',a.table_name) as stn,a.count_field,a.all_field_name,b.column_name,b.COLUMN_TYPE,c.create_time from (select table_schema,table_name,count(column_name) as count_field,group_concat(column_name) as all_field_name from columns  where table_schema not in ('sys','information_schema','performance_schema','test','mysql') group by table_schema,table_name) a,(select table_schema,table_name,column_name,COLUMN_TYPE from columns where table_schema not in ('sys','information_schema','performance_schema','test','mysql')) b,(select table_schema,table_name,create_time from tables where table_schema not in ('sys','information_schema','performance_schema','test','mysql'))cwhere a.table_schema=b.table_schema and a.table_name=b.table_name and a.table_schema=c.table_schema and a.table_name=c.table_name; "|sort|uniq>/tmp/table_list_${port}.lst
+
+# cat /tmp/table_list_${port}.lst
+
+else
+	$mysql -u$user -p$passwd -h127.0.0.1 -P${port} -Dinformation_schema -e "select concat(a.table_schema,'.',a.table_name) as stn,a.count_field,a.all_field_name,b.column_name,b.COLUMN_TYPE,c.create_time from (select table_schema,table_name,count(column_name) as count_field,group_concat(column_name) as all_field_name from columns  where table_schema not in ('sys','information_schema','performance_schema','test','mysql') group by table_schema,table_name) a,(select table_schema,table_name,column_name,COLUMN_TYPE from columns where table_schema not in ('sys','information_schema','performance_schema','test','mysql')) b,(select table_schema,table_name,create_time from tables where table_schema not in ('sys','information_schema','performance_schema','test','mysql'))c where a.table_schema=b.table_schema and a.table_name=b.table_name and a.table_schema=c.table_schema and a.table_name=c.table_name;"|sort|uniq>  ${tab_list_file}_${datetime}sdiff  ${tab_list_file}  ${tab_list_file}_${datetime}|grep '|\|<\|>' >/tmp/chg_tab_list_${port}.lst
+
+ 	mv ${tab_list_file}_${datetime} ${tab_list_file}
+
+fi
+
+
+[root@dbserver220 tmp]# sh /root/check_meta_change.sh 3307
+
+mysql> alter table jiale add column telphone varchar(20);
+
+Query OK, 0 rows affected (0.04 sec)
+
+Records: 0  Duplicates: 0  Warnings: 0
+
+
+
+mysql>  alter table jiale add column job varchar(30);
+
+Query OK, 0 rows affected (0.03 sec)
+
+Records: 0  Duplicates: 0  Warnings: 0
+
+
+mysql> alter table jiale drop column address;
+
+Query OK, 0 rows affected (0.03 sec)
+
+Records: 0  Duplicates: 0  Warnings: 0
+
+
+
+[root@dbserver220 tmp]# more chg_tab_list_3307.lst 
+
+monitor.jiale   4       id,name,address,telphone        addre | monitor.jiale   5       id,name,address,telphone,job    addre
+
+monitor.jiale   4       id,name,address,telphone        id    | monitor.jiale   5       id,name,address,telphone,job    id
+
+monitor.jiale   4       id,name,address,telphone        name  | monitor.jiale   5       id,name,address,telphone,job    job
+
+monitor.jiale   4       id,name,address,telphone        telph | monitor.jiale   5       id,name,address,telphone,job    name
+
+                                                              > monitor.jiale   5       id,name,address,telphone,job    telph
+
+[root@dbserver220 tmp]# sh /root/check_meta_change.sh 3307
+
+mysql: [Warning] Using a password on the command line interface can be insecure.
+
+You have mail in /var/spool/mail/root
+
+
+
+[root@dbserver220 tmp]# more chg_tab_list_3307.lst        
+
+monitor.jiale   5       id,name,address,telphone,job    addre | monitor.jiale   4       id,name,telphone,job    id      int(1
+
+monitor.jiale   5       id,name,address,telphone,job    id    | monitor.jiale   4       id,name,telphone,job    job     varch
+
+monitor.jiale   5       id,name,address,telphone,job    job   | monitor.jiale   4       id,name,telphone,job    name    varch
+
+monitor.jiale   5       id,name,address,telphone,job    name  | monitor.jiale   4       id,name,telphone,job    telphone
+
+monitor.jiale   5       id,name,address,telphone,job    telph <
