@@ -1,0 +1,66 @@
+-- 误操作，开发要求删除 王丹丹1， 结果手误删除了以王丹丹开头的三条数据。。。（莫慌！）
+delete FROM t_sys_user where name like '王丹丹%';
+
+
+--确认下误操作时间点
+mysqlbinlog  --base64-output=decode-rows -v --start-datetime='2017-09-15 10:50:00' --stop-datetime='2017-09-15 10:52:00' --database=chezhibao /data/mysql/backupdata/mysql-bin.000228 >/tmp/binlog_0915.sql
+
+vi /tmp/binlog_0915.sql
+-- 通过此条件找出符合误删除的数据 DELETE FROM `chezhibao`.`t_sys_user`
+
+ 154270 BEGIN
+ 154271 /*!*/;
+ 154272 # at 724983158
+ 154273 #170915 10:51:07 server id 100310  end_log_pos 724983441 CRC32 0x5b89725e       Table_map: `chezhibao`.`t_sys_user` mapped to number 313843
+ 154274 # at 724983441
+ 154275 #170915 10:51:07 server id 100310  end_log_pos 724984900 CRC32 0x53f8debe       Delete_rows: table id 313843 flags: STMT_END_F
+ 154276 ### DELETE FROM `chezhibao`.`t_sys_user`
+ 154277 ### WHERE
+ 154278 ###   @1=2618
+ 154279 ###   @2=544
+ 154280 ###   @3='/287/1216/1225/1267/544/'
+ 154281 ###   @4='王丹丹'
+ 154282 ###   @5='wangdandan'
+ 154283 ###   @6=1
+ 154284 ###   @7='3b7a4e3e5fa25d2fb038a52563bcd7c7+encrypted'
+ 154285 ###   @8='wangdandan@mychebao.com'
+ 154286 ###   @9='wangdandan'
+..................
+
+-- 确定开始结束位置 
+sed -n '154276,154539p' /tmp/binlog_0915.sql >/tmp/binlog_dandan.sql
+
+
+-- 再次确认
+vi /tmp/binlog_dandan.sql
+[root@DB30 ~]# vi /tmp/binlog_dandan.sql
+### DELETE FROM `chezhibao`.`t_sys_user`
+### WHERE
+###   @1=2618
+###   @2=544
+###   @3='/287/1216/1225/1267/544/'
+###   @4='王丹丹'
+###   @5='wangdandan'
+###   @6=1
+###   @7='3b7a4e3e5fa25d2fb038a52563bcd7c7+encrypted'
+###   @8='wangdandan@mychebao.com'
+###   @9='wangdandan'
+..........
+
+-- 导入mylogmnr.pl 恢复脚本，修改相关变量 （用户名，端口 ）
+
+perl mylogmnr.pl -u zhangjl -p zhangjl@che2017 -f /tmp/binlog_dandan.sql -lh 10.100.12.30 -o undo
+
+--查看 生成文件
+[root@DB30 ~]# ll /tmp/binlog_dandan.sql
+binlog_dandan.sql           binlog_dandan.sql.undo      binlog_dandan.sql.undo_tmp  
+[root@DB30 ~]# ll /tmp/binlog_dandan.sql.undo
+-rw-r--r-- 1 root root 2572 Sep 15 13:31 /tmp/binlog_dandan.sql.undo
+[root@DB30 ~]# vi /tmp/binlog_dandan.sql.undo
+BEGIN;
+INSERT INTO chezhibao.t_sys_user  VALUES( 2678 , 493, NULL, '王丹丹kf', NULL, 1, '', '', '王丹丹kf', '75CBE2D75B7E6202A4CE19F716EFA854', '2015-08-26 08:47:32', '2015-08-25 08:45:59', '223.68.139.179', '223.68.139.179', 0, '', 1478572909, NULL, NULL, NULL, NULL, '0', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', NULL, NULL, NULL, '0', NULL, NULL, '99', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+INSERT INTO chezhibao.t_sys_user  VALUES( 3160 , 493, NULL, '王丹丹1', 'wangdandan1', 1, '3b7a4e3e5fa25d2fb038a52563bcd7c7+encrypted', '', '王丹丹', '6C14DA109E294D1E8155BE8AA4B1CE8E', '2016-03-02 09:17:01', '2016-03-02 09:17:02', '111.192.197.41', '111.192.197.41', 0, '', 1478572909, '', '', NULL, '', '0', NULL, '', NULL, NULL, NULL, NULL, NULL, 0, '重复账号，已合并，此条作废。', '', '', NULL, '', '', NULL, '', '', NULL, '', '', NULL, '1', '', '', '', NULL, '', NULL, 0, '', '', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', NULL, NULL, NULL, '0', NULL, NULL, '99', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+INSERT INTO chezhibao.t_sys_user  VALUES( 2618 , 544, '/287/1216/1225/1267/544/', '王丹丹', 'wangdandan', 1, '3b7a4e3e5fa25d2fb038a52563bcd7c7+encrypted', 'wangdandan@mychebao.com', 'wangdandan', '69A75775ED8E5FC6875ACB90B1DF7449', '2017-09-15 10:48:44', '2017-08-26 17:36:15', '111.194.16.106', '114.246.232.93', 1, '', 1505443726, '000599', '00380', '2015:08:07', '02', '1', '2015:11:07', '9bbcc5ce6a0ce209cde75cdb107497d9240a1dd62a6506f5+encrypted', '1992:12:08', '1992', '12', '08', '90', 25, '', '2015-08', '2015-11', '', '民生银行', '6216910104325433', 3685, '北京城市建设学院', '行
+政助理', '2011-05', '41b1e34fabd0c2e56d9bbfcd20200bb4975d8f60581cc1802a82187f2b5cca5b78873afb1d09dd1907cb06a7c757cd13fee7b13f544edbe4596b3f87f4b3d4f4+encrypted', '5f1a592cd497977085f0bbb36b6561e0c1d19f9dc2ebd803600a0e1a3b782659f9d9001417170e7340f2df932eced4767e4ea9f38cdb2a5c7776664d62436456+encrypted', 3526, '1', '华晨4s店', '前台接待', 'd5014bdd262391ef3e3ab094f3cd32ca+encrypted', 3717, '29f9dc01250a00ad33cc870b543901b7+encrypted', '2008-07', 9, '1', '0', '0', '1', '1', '1', '1', '0', '0', '0', '1', '1', '0', '1', '1', '0', '0', '0', '0', '0', NULL, NULL, NULL, '0', 1, '超级管理员
+', '99', NULL, NULL, NULL, NULL, '1867', '1867', 0);
+
