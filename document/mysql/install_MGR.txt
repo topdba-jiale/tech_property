@@ -1,0 +1,136 @@
+MGR 详细安装配置
+
+-- 关闭防火墙
+-- MGR mode 重要配置参数确认(有ip地址需根据机器变更)
+binlog-format=ROW
+gtid_mode = on
+binlog_checksum=NONE
+enforce_gtid_consistency = 1
+binlog_gtid_simple_recovery = 1
+log_slave_updates
+master_info_repository = TABLE
+relay_log_info_repository = TABLE
+slave-preserve-commit-order=on
+transaction_write_set_extraction=XXHASH64
+report_host=192.168.220.122
+plugin_load_add='group_replication.so
+transaction_write_set_extraction=XXHASH64
+loose-group_replication_group_name="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+loose-group_replication_start_on_boot=off
+loose-group_replication_local_address= "192.168.220.122:24901" 
+loose-group_replication_group_seeds= "192.168.220.122:24901,192.168.220.128:24901,192.168.220.129:24901"
+loose-group_replication_bootstrap_group= off
+loose-group_replication_single_primary_mode=on
+loose-group_replication_enforce_update_everywhere_checks= off
+loose-group_replication_ip_whitelist = "192.168.220.122,192.168.220.128,192.168.220.129"
+
+
+shell> groupadd mysql
+shell> useradd -r -g mysql -s /bin/false mysql
+shell> cd /usr/local
+shell> mkdir -p /data/mysqldata/mysql3333/{binlog,innodb_log,innodb_ts,log,backup,sock,mydata,relaylog,tmpdir}
+shell> chown -R mysql.mysql /data/mysqldata/mysql3333/
+shell> vi /data/mysqldata/mysql3333/my.cnf.3333 
+
+shell> tar xzvf tar xzvf mysql-8.0.17-el7-x86_64.tar.gz -C /usr/local/
+shell> mv /usr/local/mysql-8.0.17-el7-x86_64 /usr/local/mysql8.0
+shell> chown -R mysql.mysql /usr/local/mysql8.0
+shell> cd /usr/local/mysql8.0
+shell> ./bin/mysqld --defaults-file=/data/mysqldata/mysql3333/my.cnf.3333 --initialize-insecure
+shell> ./bin/mysqld_safe --defaults-file=/data/mysqldata/mysql3333/my.cnf.3333 --user=mysql &
+shell> mysql -uroot -p -S /data/mysqldata/mysql3333/sock/mysql.sock
+
+-- 安装group_replication插件(所有节点执行)
+root@localhost:(none) 5.7.25-log 11:58:49> INSTALL PLUGIN group_replication SONAME 'group_replication.so';
+Query OK, 0 rows affected (0.03 sec)
+
+
+
+-- 配置MGR通信账号，并清理MASTER log_bin(所有节点执行)
+-- 220.122
+SET SQL_LOG_BIN=0;
+CREATE USER mgruser@'%' IDENTIFIED BY 'mgr@hot';
+GRANT REPLICATION SLAVE,replication client ON *.* TO mgruser@'%';
+FLUSH PRIVILEGES;
+SET SQL_LOG_BIN=1;
+
+
+
+-- 创建MGR依赖的复制环境(所有节点执行)
+CHANGE MASTER TO MASTER_USER='mgruser', MASTER_PASSWORD='mgr@hot' FOR CHANNEL 'group_replication_recovery';
+
+-- 
+root@localhost:(none) 8.0.12 02:04:19> CHANGE MASTER TO MASTER_USER='mgruser', MASTER_PASSWORD='mgr@hot' FOR CHANNEL 'group_replication_recovery';
+Query OK, 0 rows affected, 2 warnings (0.02 sec)
+Note (Code 1759): Sending passwords in plain text without SSL/TLS is extremely insecure.
+Note (Code 1760): Storing MySQL user name or password information in the master info repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START SLAVE; see the 'START SLAVE Syntax' in the MySQL Manual for more information.
+
+
+
+-- 在主节点上启动MGR(节点192.168.220.122上执行)
+SET GLOBAL group_replication_bootstrap_group=ON;
+START group_replication;
+SET GLOBAL group_replication_bootstrap_group=off;
+
+
+-- 在辅助节点上启动MGR(在节点192.168.220.128/129 上执行)
+START group_replication;
+
+
+
+-- 搭建过程遇到的问题
+-- 无法连接 
+-- 解决方案：需在配置文件中加入 default_authentication_plugin=mysql_native_password 。mysql8.0 默认caching_sha2_password 认证插件
+-- 问题
+[root@rds-virtual-host109 mysql]# mysql -uroot -p -S /data/mysqldata/mysql3333/sock/mysql.sock
+Enter password: 
+ERROR 2059 (HY000): Authentication plugin 'caching_sha2_password' cannot be loaded: /usr/lib64/mysql/plugin/caching_sha2_password.so: cannot open shared object file: No such file or directory
+
+
+
+
+-- 模拟当机后表现
+-- 220.122 
+[root@dba-virtual-host-220122 log]# ps -ef|grep mysqld|grep 3333
+root 27443 18859 0 16:21 pts/0 00:00:00 /bin/sh ./bin/mysqld_safe --defaults-file=/data/mysqldata/mysql3333/my.cnf.3333 --user=mysql
+mysql 28808 27443 1 16:21 pts/0 00:01:20 /usr/local/mysql8.0/bin/mysqld --defaults-file=/data/mysqldata/mysql3333/my.cnf.3333 --basedir=/usr/local/mysql8.0 --datadir=/data/mysqldata/mysql3333/mydata --plugin-dir=/usr/local/mysql8.0/lib/plugin --user=mysql --log-error=/data/mysqldata/mysql3333/log/error.log --open-files-limit=65535 --pid-file=/data/mysqldata/mysql3333/sock/mysql.pid --socket=/data/mysqldata/mysql3333/sock/mysql.sock --port=3333
+root 29055 18859 0 16:21 pts/0 00:00:00 mysql -uroot -p -S /data/mysqldata/mysql3333/sock/mysql.sock
+[root@dba-virtual-host-220122 log]# kill -9 28808 27443 
+
+
+-- 220.128/129 上查看状态 (遗留问题：选主时长是由哪些因素决定？流程？)
+root@localhost:jiale 8.0.17 05:47:24> select * from performance_schema.replication_group_members;
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+| CHANNEL_NAME | MEMBER_ID | MEMBER_HOST | MEMBER_PORT | MEMBER_STATE | MEMBER_ROLE | MEMBER_VERSION |
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+| group_replication_applier | 58d46248-d46d-11e9-87d5-525400bdf400 | 192.168.220.128 | 3333 | ONLINE | PRIMARY | 8.0.17 |
+| group_replication_applier | cb06762f-d46c-11e9-8a89-52540005ae6e | 192.168.220.129 | 3333 | ONLINE | SECONDARY | 8.0.17 |
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+2 rows in set (0.01 sec)
+
+
+-- 220.122 
+-- 恢复服务后查看状态
+root@localhost:performance_schema 8.0.17 05:48:41> select * from performance_schema.replication_group_members;
++---------------------------+-----------+-------------+-------------+--------------+-------------+----------------+
+| CHANNEL_NAME | MEMBER_ID | MEMBER_HOST | MEMBER_PORT | MEMBER_STATE | MEMBER_ROLE | MEMBER_VERSION |
++---------------------------+-----------+-------------+-------------+--------------+-------------+----------------+
+| group_replication_applier | | | NULL | OFFLINE | | |
++---------------------------+-----------+-------------+-------------+--------------+-------------+----------------+
+1 row in set (0.00 sec)
+
+-- 220.122 加入集群后查看状态 
+root@localhost:performance_schema 8.0.17 05:49:51> start group_replication;
+Query OK, 0 rows affected (4.10 sec)
+
+root@localhost:performance_schema 8.0.17 05:50:07> select * from performance_schema.replication_group_members;
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+| CHANNEL_NAME | MEMBER_ID | MEMBER_HOST | MEMBER_PORT | MEMBER_STATE | MEMBER_ROLE | MEMBER_VERSION |
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+| group_replication_applier | 176e56fe-d46d-11e9-9725-525400564863 | 192.168.220.122 | 3333 | ONLINE | SECONDARY | 8.0.17 |
+| group_replication_applier | 58d46248-d46d-11e9-87d5-525400bdf400 | 192.168.220.128 | 3333 | ONLINE | PRIMARY | 8.0.17 |
+| group_replication_applier | cb06762f-d46c-11e9-8a89-52540005ae6e | 192.168.220.129 | 3333 | ONLINE | SECONDARY | 8.0.17 |
++---------------------------+--------------------------------------+-----------------+-------------+--------------+-------------+----------------+
+3 rows in set (0.00 sec)
+
+-- 至此搭建，模拟当机选主过程完成。
