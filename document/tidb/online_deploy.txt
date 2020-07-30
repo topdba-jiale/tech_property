@@ -1,0 +1,1074 @@
+10.100.16.62 TiDB PD
+
+10.100.16.63 TiDB PD
+
+10.100.16.64 PD
+
+10.100.16.65 TiKV
+
+10.100.16.66 TiKV
+
+10.100.16.67 TiKV
+
+10.100.16.68 中控机
+
+
+
+
+
+操作记录：
+
+-- 所有节点 配置
+
+hostname DB68    --根据实际情况调整
+
+mkfs.ext4 /dev/vdb
+
+mkdir /database
+
+mount /dev/vdb /database/
+
+
+
+
+
+-- 所有节点挂载 ext4 文件系统时请添加 nodelalloc 挂载参数
+
+echo "/dev/vdb /database ext4 defaults,nodelalloc,noatime 0 2" >>/etc/fstab
+
+
+
+umount  /database/
+
+mount -a
+
+mount -t ext4
+
+--  显示如下：
+
+/dev/vda1 on / type ext4 (rw,relatime,data=ordered)
+
+/dev/vdb on /database type ext4 (rw,noatime,nodelalloc,data=ordered)
+
+
+
+-- 确认ntp服务
+
+ntpstat
+
+-- 输出如下表示正常：
+
+synchronised to NTP server (100.100.3.1) at stratum 3
+
+   time correct to within 46 ms
+
+   polling server every 1024 s
+
+
+
+
+
+-- 配置互信。在中控机10.100.16.68 ：
+
+[root@iZbp19hff5q8gwef8of6rfZ ~]# useradd tidb
+
+[root@iZbp19hff5q8gwef8of6rfZ ~]# passwd tidb
+
+Changing password for user tidb.
+
+New password:
+
+BAD PASSWORD: The password is shorter than 8 characters
+
+Retype new password:
+
+passwd: all authentication tokens updated successfully.
+
+[root@iZbp19hff5q8gwef8of6rfZ ~]# su - tidb
+
+[tidb@DB68 ~]$ pwd
+
+/home/tidb
+
+[tidb@DB68 ~]$ ssh-keygen -t rsa
+
+Generating public/private rsa key pair.
+
+Enter file in which to save the key (/home/tidb/.ssh/id_rsa):
+
+Created directory '/home/tidb/.ssh'.
+
+Enter passphrase (empty for no passphrase):
+
+Enter same passphrase again:
+
+Your identification has been saved in /home/tidb/.ssh/id_rsa.
+
+Your public key has been saved in /home/tidb/.ssh/id_rsa.pub.
+
+The key fingerprint is:
+
+17:1b:bf:77:99:e5:da:f9:a5:38:7f:33:ad:15:45:57 tidb@DB68
+
+The key's randomart image is:
+
++--[ RSA 2048]----+
+
+|                E|
+
+|               ..|
+
+|          o     .|
+
+|           =    .|
+
+|        S o .  ..|
+
+|         .   . .=|
+
+|            . .o*|
+
+|            .o O=|
+
+|            .o=+*|
+
++-----------------+
+
+
+
+
+
+yum -y install git
+
+git clone -b release-2.0 https://github.com/pingcap/tidb-ansible.git
+
+
+
+
+
+
+
+
+
+sudo yum -y install epel-release
+
+sudo yum -y install python-pip curl
+
+cd tidb-ansible
+
+sudo pip install -r ./requirements.txt
+
+
+
+
+
+
+
+
+
+[tidb_servers]
+
+10.100.16.62
+
+10.100.16.63
+
+
+
+[tikv_servers]
+
+
+
+TiKV1 ansible_host=10.100.16.65 deploy_dir=/database/deploy tikv_port=20171 labels="host=tikv1"
+
+TiKV2 ansible_host=10.100.16.66 deploy_dir=/database/deploy tikv_port=20171 labels="host=tikv2"
+
+TiKV3 ansible_host=10.100.16.67 deploy_dir=/database/deploy tikv_port=20171 labels="host=tikv3"
+
+
+
+
+
+
+
+[pd_servers]
+
+10.100.16.62
+
+10.100.16.63
+
+10.100.16.64
+
+
+
+[spark_master]
+
+
+
+[spark_slaves]
+
+
+
+[monitoring_servers]
+
+10.100.16.68
+
+
+
+[grafana_servers]
+
+10.100.16.68
+
+
+
+[monitored_servers]
+
+10.100.16.62
+
+10.100.16.63
+
+10.100.16.64
+
+10.100.16.65
+
+10.100.16.66
+
+10.100.16.67
+
+10.100.16.68
+
+
+
+[pump_servers:children]
+
+tidb_servers
+
+
+
+[pd_servers:vars]
+
+# location_labels = ["zone","rack","host"]
+
+
+
+[all:vars]
+
+deploy_dir = /database/deploy
+
+ansible_user = tidb
+
+cluster_name = chezhibao-cluster
+
+tidb_version = v2.0.0
+
+deployment_method = binary
+
+process_supervision = systemd
+
+timezone = Asia/Shanghai
+
+set_timezone = True
+
+enable_firewalld = False
+
+enable_ntpd = True
+
+machine_benchmark = True
+
+set_hostname = True
+
+enable_binlog = False
+
+enable_slow_query_log=/database/deploy/log/tidb_slow_query.log
+
+zookeeper_addrs = ""
+
+deploy_without_tidb = False
+
+alertmanager_target = ""
+
+grafana_admin_user = "admin"
+
+grafana_admin_password = "admin@che"
+
+
+
+
+
+-- 使用tidb用户，确保/home/tidb/tidb-ansible 目录 属主 权限为 tidb 非root chown -R tidb.tidb ./
+
+su - tidb
+
+
+
+[tidb@DB68 tidb-ansible]$ ansible-playbook -i hosts.ini create_users.yml -k    --输入root 密码
+
+SSH password:
+
+
+
+PLAY [all] ***********************************************************************************************************************************************************************************************
+
+
+
+TASK [create user] ***************************************************************************************************************************************************************************************
+
+changed: [10.100.16.66]
+
+changed: [10.100.16.64]
+
+changed: [10.100.16.65]
+
+changed: [10.100.16.63]
+
+changed: [10.100.16.62]
+
+ok: [10.100.16.68]
+
+changed: [10.100.16.67]
+
+
+
+TASK [set authorized key] ********************************************************************************************************************************************************************************
+
+ok: [10.100.16.66]
+
+ok: [10.100.16.63]
+
+ok: [10.100.16.65]
+
+ok: [10.100.16.64]
+
+ok: [10.100.16.62]
+
+ok: [10.100.16.67]
+
+ok: [10.100.16.68]
+
+
+
+TASK [update sudoers file] *******************************************************************************************************************************************************************************
+
+ok: [10.100.16.66]
+
+ok: [10.100.16.64]
+
+ok: [10.100.16.65]
+
+ok: [10.100.16.62]
+
+ok: [10.100.16.63]
+
+ok: [10.100.16.67]
+
+ok: [10.100.16.68]
+
+
+
+PLAY RECAP ***********************************************************************************************************************************************************************************************
+
+10.100.16.62               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.63               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.64               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.65               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.66               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.67               : ok=3    changed=1    unreachable=0    failed=0  
+
+10.100.16.68               : ok=3    changed=0    unreachable=0    failed=0  
+
+
+
+Congrats! All goes well. :-)
+
+[tidb@DB68 tidb-ansible]$ ansible -i inventory.ini all -m shell -a 'whoami' -b
+
+10.100.16.65 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.68 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.64 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.63 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.62 | SUCCESS | rc=0 >>
+
+root
+
+
+
+TiKV1 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.66 | SUCCESS | rc=0 >>
+
+root
+
+
+
+10.100.16.67 | SUCCESS | rc=0 >>
+
+root
+
+
+
+TiKV2 | SUCCESS | rc=0 >>
+
+root
+
+
+
+TiKV3 | SUCCESS | rc=0 >>
+
+root
+
+
+
+
+
+
+
+ansible-playbook -i hosts.ini create_users.yml -k
+
+
+
+ansible -i inventory.ini all -m shell -a 'whoami' -b
+
+
+
+ansible-playbook local_prepare.yml
+
+
+
+ansible-playbook bootstrap.yml    --这步可能会遇到benchmark iops无法通过问题，可以通过注释bootstrap 相关role信息
+
+
+
+ansible-playbook deploy.yml  --部署集群
+
+
+
+yum install fontconfig   
+
+
+
+ansible-playbook start.yml 
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- 下载工具包
+
+-- 10.100.16.62/63
+
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz
+
+
+
+[root@DB62 tidb]# tar xzvf tidb-enterprise-tools-latest-linux-amd64.tar.gz
+
+tidb-enterprise-tools-latest-linux-amd64/
+
+tidb-enterprise-tools-latest-linux-amd64/bin/
+
+tidb-enterprise-tools-latest-linux-amd64/bin/loader
+
+tidb-enterprise-tools-latest-linux-amd64/bin/syncer
+
+tidb-enterprise-tools-latest-linux-amd64/bin/checker
+
+tidb-enterprise-tools-latest-linux-amd64/bin/dump_region
+
+tidb-enterprise-tools-latest-linux-amd64/bin/importer
+
+tidb-enterprise-tools-latest-linux-amd64/bin/mydumper
+
+
+
+
+
+ln -s /home/tidb/tidb-enterprise-tools-latest-linux-amd64/bin/* /usr/bin/
+
+
+
+-- 前提：老TIDB集群节点授权 ，即在16.50/51/52任意机器授权10.100.16.62/63 机器权限
+
+
+
+mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb@che -t 16 -F 64 -B csfmonitor  --skip-tz-utc -o /database/deploy/csfmonitor_180507
+
+
+
+mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb@che -t 16 -F 64 -B  csfmonitora  --skip-tz-utc -o /database/deploy/csfmonitora_180507
+
+
+
+mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb@che -t 16 -F 64 -B  csfmonitorb  --skip-tz-utc -o /database/deploy/csfmonitorb_180507
+
+
+
+mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb@che -t 16 -F 64 -B csfmonitorp  --skip-tz-utc -o /database/deploy/csfmonitorp_180507
+
+
+
+mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb@che -t 16 -F 64 -B  dubbokeeper --skip-tz-utc -o /database/deploy/dubbokeeper_180507
+
+
+
+
+
+
+
+loader -h 127.0.0.1 -u root -P 4000 -t 16 -d /database/deploy/csfmonitora_180507
+
+
+
+
+
+
+
+
+
++---------------+------------+-------------------------------------------+
+
+| host          | user       | password                                  |
+
++---------------+------------+-------------------------------------------+
+
+| %             | root       |                                           |
+
+| 172.16.10.181 | dubbo_user | *44BD4CE23393D20865F9F12682EC386E9636096E |
+
+| 10.200.14.12  | csfuser    | *8F056221654A8EB937417F3D90ABF4B143491A5B |
+
+| 10.100.20.19  | csfuser    | *8F056221654A8EB937417F3D90ABF4B143491A5B |
+
+| %             | tidb       | *08E7A47E7FDBED4470F67DDF39EBE0B053BB114B |
+
+| 10.100.14.16  | dubbo_user | *0867D7216615C46CE186FBF486C1684CBF175B53 |
+
+| 10.100.16.%   | tidb       | *08E7A47E7FDBED4470F67DDF39EBE0B053BB114B |
+
++---------------+------------+-------------------------------------------+
+
+
+
+grant all on *.* to dubbo_user@'10.100.14.16' identified by 'Dubbo@che'; --现网
+
+grant all on *.* to csfuser@'10.100.20.19' identified by 'Csf@che';    --B版
+
+grant all on *.* to csfuser@'10.200.14.14' identified by 'Csf@che';   -- 预发布
+
+
+
+
+
+-- 实时报表相关需求
+
+-- 导出库表
+
+./bin/mydumper -h 10.100.12.40 -P 33061 -u tidb -p tidb123 -t 16 -F 64 -B chezhibao  -T t_sys_user,t_sys_org,t_transaction,t_price_buyer,t_price_customer,t_car,t_contract_document --skip-tz-utc -o /database/deploy/backup/chezhibao_180523
+
+./bin/loader -h 10.100.16.62 -P 4000 -u tidb -p tidb@che -t 16 -d /database/deploy/backup/chezhibao_180523
+
+
+
+
+
+./bin/mydumper -h 10.100.12.62 -P 33061 -u tidb -p tidb123 -t 16 -F 64 -B crm  -T t_customer,t_customer_tracking,t_customer_tracking_his --skip-tz-utc -o /database/deploy/backup/crm_180523
+
+
+
+time ./bin/loader -h 10.100.16.62 -P 4000 -u tidb -p tidb@che -t 16 -d /database/deploy/backup/crm_180523
+
+
+
+
+
+./bin/mydumper -h 10.100.12.79 -P 33061 -u tidb -p tidb123 -t 16 -F 64 -B orders  -T t_order_status,t_order --skip-tz-utc -o /database/deploy/backup/orders_180523
+
+time ./bin/loader -h 10.100.16.62 -P 4000 -u tidb -p tidb@che -t 16 -d /database/deploy/backup/orders_180523
+
+
+
+
+
+./bin/mydumper -h 10.100.12.89 -P 33061 -u tidb -p tidb123 -t 16 -F 64 -B track  -T t_customer_tracking_his --skip-tz-utc -o /database/deploy/backup/track_180524
+
+time ./bin/loader -h 10.100.16.62 -P 4000 -u tidb -p tidb@che -t 16 -d /database/deploy/backup/track_180524
+
+
+
+-- 后补
+
+./bin/mydumper -h 10.100.12.40 -P 33061 -u tidb -p tidb123 -t 16 -F 64 -B chezhibao  -T t_sys_dic --skip-tz-utc -o /database/deploy/backup/chezhibao_180524
+
+./bin/loader -h 10.100.16.62 -P 4000 -u tidb -p tidb@che -t 16 -d /database/deploy/backup/chezhibao_180524
+
+
+
+-- 导入数据
+
+mysql -utidb -ptidb@che -P4000  -h127.0.0.1 chezhibao </database/deploy/backup/chezhibao_180524/chezhibao.t_sys_dic-schema.sql
+
+mysql -utidb -ptidb@che -P4000  -h127.0.0.1 chezhibao </database/deploy/backup/chezhibao_180524/chezhibao.t_sys_dic.sql
+
+
+
+
+
+--关系对照
+
+
+
+crm            t_customer                basic_customer
+
+crm            t_customer_tracking        basic_customer_tracking
+
+crm            t_customer_tracking_his    basic_customer_tracking_his
+
+chezhibao    t_sys_user                basic_sys_user
+
+chezhibao    t_sys_org                basic_sys_org
+
+chezhibao    t_transaction            basic_transaction
+
+chezhibao    t_price_buyer            basic_price_buyer
+
+chezhibao    t_price_customer        basic_price_customer
+
+chezhibao    t_car                    basic_car
+
+chezhibao    t_contract_document        basic_contract_document
+
+orders        t_order_status            order_t_order_status
+
+orders        t_order                    extend_order_new
+
+track       t_customer_tracking_his
+
+
+
+
+
+同步10.100.12.40：33061 chezhibao 7张表至 10.100.16.62:4000
+
+
+
+配置相关信息
+
+
+
+-- 10.100.12.40 上:
+
+[root@iZbp1g3u73g9nxqbval97tZ tidb-enterprise-tools-latest-linux-amd64]# cat config.toml
+
+
+
+log-level = "info"
+
+
+
+server-id = 140
+
+
+
+meta = "./syncer.meta"
+
+
+
+worker-count = 16
+
+batch = 10
+
+
+
+#status-addr = "10.100.16.62:10080"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_sys_user"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_sys_org"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_transaction"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_price_buyer"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_price_customer"
+
+
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_car"
+
+
+
+[[replicate-do-table]]
+
+db-name ="chezhibao"
+
+tbl-name = "t_contract_document"
+
+
+
+
+
+[from]
+
+host = "10.100.12.40"
+
+user = "syncuser"
+
+password = "sync123"
+
+port = 33061
+
+
+
+[to]
+
+host = "10.100.16.62"
+
+user = "syncuser"
+
+password = "sync123"
+
+port = 4000
+
+
+
+
+
+-- 此配置信息为 mydumper 文件 metadata ,只需第一次配置，后续自动更新
+
+[root@iZbp1g3u73g9nxqbval97tZ tidb-enterprise-tools-latest-linux-amd64]# cat syncer.meta
+
+binlog-name = "che_bin.000351"
+
+binlog-pos = 707002234
+
+binlog-gtid = ""
+
+
+
+
+
+-- 10.100.12.40 上:
+
+mysql> grant all on *.* to syncuser@10.100.16.62 identified by 'sync123';
+
+Query OK, 0 rows affected (0.01 sec)
+
+
+
+mysql> grant all on *.* to syncuser@10.100.12.40 identified by 'sync123';
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+
+
+
+
+
+-- 10.100.16.62 上:
+
+MySQL [orders]> grant all on *.* to syncuser@'10.100.12.40' identified by 'sync123';
+
+Query OK, 1 row affected (0.04 sec)
+
+
+
+
+
+
+
+-- 回到10.100.12.40
+
+
+
+[root@iZbp1g3u73g9nxqbval97tZ tidb-enterprise-tools-latest-linux-amd64]# ./bin/syncer -config config.toml
+
+2018/05/24 11:16:53 main.go:52: [info] config: log-level:info log-file: log-rotate:day status-addr: server-id:140 worker-count:16 batch:10 meta-file:./syncer.meta do-tables:[{Schema:chezhibao Name:t_sys_user};{Schema:chezhibao Name:t_sys_org};{Schema:chezhibao Name:t_transaction};{Schema:chezhibao Name:t_price_buyer};{Schema:chezhibao Name:t_price_customer};{Schema:chezhibao Name:t_car};{Schema:chezhibao Name:t_contract_document}] do-dbs:[] ignore-tables:[] ignore-dbs:[] from:DBConfig(host:10.100.12.40, user:syncuser, port:33061, pass:<omitted>) to:DBConfig(host:10.100.16.62, user:syncuser, port:4000, pass:<omitted>) skip-ddls:[] skip-dmls:[] route-rules:[] enable-gtid:false safe-mode:false git-hash: a404b7949189b51167011b11b4ac7517d5955555 utc-build-time:[2018-01-31 05:48:49] go-version:go1.9.2
+
+INFO[0000] create BinlogSyncer with config {140 mysql 10.100.12.40 33061 syncuser    false false <nil> false 0 0s 0s}
+
+INFO[0000] begin to sync binlog from position (che_bin.000351, 707002234)
+
+INFO[0000] register slave for master server 10.100.12.40:33061
+
+2018/05/24 11:16:53 syncer.go:874: [info] [syncer] last slave connection id 4147929
+
+INFO[0000] rotate to (che_bin.000351, 707002234)       
+
+2018/05/24 11:16:53 syncer.go:523: [info] rotate binlog to (che_bin.000351, 707002234)
+
+2018/05/24 11:16:53 meta.go:120: [info] save position to file, binlog-name:che_bin.000351 binlog-pos:707002234 binlog-gtid:
+
+INFO[0012] rotate to (che_bin.000352, 4)               
+
+INFO[0012] rotate to (che_bin.000352, 4)               
+
+2018/05/24 11:17:05 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:4 binlog-gtid:
+
+2018/05/24 11:17:05 syncer.go:523: [info] rotate binlog to (che_bin.000352, 4)
+
+2018/05/24 11:17:05 syncer.go:523: [info] rotate binlog to (che_bin.000352, 4)
+
+2018/05/24 11:17:23 syncer.go:862: [info] [syncer]total events = 43190, total tps = 1439, recent tps = 1439, master-binlog = (che_bin.000352, 986127109), master-binlog-gtid=, syncer-binlog = (che_bin.000352, 206392970), syncer-binlog-gtid =
+
+2018/05/24 11:17:28 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_federated_temp_carid` /* generated by server */ [pos](che_bin.000352, 422767038) [next pos](che_bin.000352, 422767198) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422767198 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_federated_temp_carid` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_federated_temp_customerid` /* generated by server */ [pos](che_bin.000352, 422767198) [next pos](che_bin.000352, 422767363) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422767363 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_federated_temp_customerid` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_federated_temp_orderid` /* generated by server */ [pos](che_bin.000352, 422767363) [next pos](che_bin.000352, 422767525) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422767525 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_federated_temp_orderid` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_federated_temp_detectionid` /* generated by server */ [pos](che_bin.000352, 422767525) [next pos](che_bin.000352, 422767691) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422767691 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_federated_temp_detectionid` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_federated_temp_buyerid` /* generated by server */ [pos](che_bin.000352, 422767691) [next pos](che_bin.000352, 422767853) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422767853 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_federated_temp_buyerid` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]CREATE TABLE  `t_federated_temp_carid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_carid' [pos](che_bin.000352, 422767853) [next pos](che_bin.000352, 422768160) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422768160 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]CREATE TABLE  `t_federated_temp_carid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_carid' [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]CREATE TABLE  `t_federated_temp_customerid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_customerid' [pos](che_bin.000352, 422768160) [next pos](che_bin.000352, 422768477) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422768477 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]CREATE TABLE  `t_federated_temp_customerid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_customerid' [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]CREATE TABLE  `t_federated_temp_orderid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_orderid' [pos](che_bin.000352, 422768477) [next pos](che_bin.000352, 422768788) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422768788 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]CREATE TABLE  `t_federated_temp_orderid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_orderid' [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]CREATE TABLE  `t_federated_temp_detectionid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_detectionid' [pos](che_bin.000352, 422768788) [next pos](che_bin.000352, 422769107) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422769107 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]CREATE TABLE  `t_federated_temp_detectionid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_detectionid' [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]CREATE TABLE  `t_federated_temp_buyerid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_buyerid' [pos](che_bin.000352, 422769107) [next pos](che_bin.000352, 422769418) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422769418 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]CREATE TABLE  `t_federated_temp_buyerid` (`id` int(11) ,KEY `idx_id` (`id`)) ENGINE=FEDERATED DEFAULT CHARSET=utf8 COLLATE=utf8_bin CONNECTION='mysql://feder:feder#che@10.100.12.65:33061/chezhibao/t_federated_temp_buyerid' [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]DROP TABLE IF EXISTS `t_temp` /* generated by server */ [pos](che_bin.000352, 422769418) [next pos](che_bin.000352, 422769562) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422769562 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]DROP TABLE IF EXISTS `t_temp` [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]create table t_temp(id int,key `idx_id`(`id`)) [pos](che_bin.000352, 422769562) [next pos](che_bin.000352, 422769697) [gtid]
+
+2018/05/24 11:17:38 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422769697 binlog-gtid:
+
+2018/05/24 11:17:38 syncer.go:628: [warning] [skip query-ddl-sql]create table t_temp(id int,key `idx_id`(`id`)) [schema]chezhibao
+
+2018/05/24 11:17:38 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422791853) [next pos](che_bin.000352, 422791951) [gtid]
+
+2018/05/24 11:17:41 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422791951 binlog-gtid:
+
+2018/05/24 11:17:41 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:41 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422799920) [next pos](che_bin.000352, 422800018) [gtid]
+
+2018/05/24 11:17:41 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422800018 binlog-gtid:
+
+2018/05/24 11:17:41 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:41 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422800377) [next pos](che_bin.000352, 422800475) [gtid]
+
+2018/05/24 11:17:41 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422800475 binlog-gtid:
+
+2018/05/24 11:17:41 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:41 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422800475) [next pos](che_bin.000352, 422800573) [gtid]
+
+2018/05/24 11:17:41 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422800573 binlog-gtid:
+
+2018/05/24 11:17:41 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:41 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422800573) [next pos](che_bin.000352, 422800671) [gtid]
+
+2018/05/24 11:17:41 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422800671 binlog-gtid:
+
+2018/05/24 11:17:41 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:41 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422821434) [next pos](che_bin.000352, 422821532) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422821532 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422827523) [next pos](che_bin.000352, 422827621) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422827621 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422827621) [next pos](che_bin.000352, 422827719) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422827719 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422827719) [next pos](che_bin.000352, 422827817) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422827817 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422827817) [next pos](che_bin.000352, 422827915) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422827915 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422827915) [next pos](che_bin.000352, 422828013) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422828013 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422829404) [next pos](che_bin.000352, 422829502) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422829502 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422829502) [next pos](che_bin.000352, 422829600) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422829600 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]truncate table t_temp [pos](che_bin.000352, 422829600) [next pos](che_bin.000352, 422829698) [gtid]
+
+2018/05/24 11:17:44 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:422829698 binlog-gtid:
+
+2018/05/24 11:17:44 syncer.go:628: [warning] [skip query-ddl-sql]truncate table t_temp [schema]chezhibao
+
+2018/05/24 11:17:44 syncer.go:614: [info] [query]TRUNCATE TABLE t_channel_org_rank [pos](che_bin.000352, 425696166) [next pos](che_bin.000352, 425696276) [gtid]
+
+2018/05/24 11:17:47 meta.go:120: [info] save position to file, binlog-name:che_bin.000352 binlog-pos:425696276 binlog-gtid:
+
+2018/05/24 11:17:47 syncer.go:628: [warning] [skip query-ddl-sql]TRUNCATE TABLE t_channel_org_rank [schema]chezhibao
+
+2018/05/24 11:17:47 syncer.go:614: [info] [query]truncate t_channel_buyer_fzr_relation [pos](che_bin.000352, 426152879) [next pos](che_bin.000352, 426152993) [gtid]
+
+
+
+
+
+
+
+-- 使用如下方式. 确认exit退出
+
+nohup  ./bin/syncer -config config.toml &
+
+
+
+
+
+#!/bin/bash
+
+num=`ps -ef|grep -w syncer|grep -v grep |wc -l`
+
+if [[ ${num} -lt 1 ]] ;then
+
+cd /usr/local/tidb-enterprise-tools-latest-linux-amd64
+
+nohup  ./bin/syncer -config config.toml &
+
+fi
+
