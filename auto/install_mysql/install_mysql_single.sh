@@ -27,11 +27,11 @@ fi
 read -p "Input you will use MySQL-Version{5.7 or 8.0}:" MYSQL_VERSION
 
 cat /etc/passwd |grep -w mysql >/dev/null 2>&1 && echo "User:mysql is exists" >/dev/null || groupadd mysql >/dev/null 2>&1  && useradd -r -g mysql -s /bin/false mysql >/dev/null 2>&1 
-export DBPATH="/database/mysql$MYSQL_PORT/"
+export DBPATH="/data/mysql$MYSQL_PORT/"
 if [ ! -d ${DBPATH} ];then
-        mkdir -p /database/mysql$MYSQL_PORT/{data,binlog,relaylog,redolog,tmp,undolog,backup}
+        mkdir -p /data/mysql$MYSQL_PORT/{data,binlog,relaylog,redolog,tmp,undolog,backup}
 fi
-chown -R mysql.mysql /database/mysql$MYSQL_PORT/
+chown -R mysql.mysql /data/mysql$MYSQL_PORT/
 
 export MY_V=$MYSQL_VERSION
 #mysql_tarball=`find $basedir -maxdepth 1 -name 'mysql*-glibc*.tar*' |grep $my_v |awk -F'/' '{print $2}'`
@@ -89,7 +89,7 @@ if [[ $MY_V == "5.7" ]];then
         ln -s /usr/local/mysql/bin/mysql* /usr/bin/ >/dev/null 2>&1
         cd /usr/local/mysql && ./bin/mysqld --defaults-file=/etc/mysql_$MYSQL_PORT.cnf --initialize-insecure
         sleep 10
-        export ERROR_NUM=`cat /database/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
+        export ERROR_NUM=`cat /data/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
         if [ $ERROR_NUM -gt 0 ];then 
         echo "Initialize error,check you initialize!!! " >>$OPERATE_LOG
         fi
@@ -97,7 +97,7 @@ if [[ $MY_V == "5.7" ]];then
     else
         cd /usr/local/mysql && ./bin/mysqld --defaults-file=/etc/mysql_$MYSQL_PORT.cnf --initialize-insecure
         sleep 10
-        export ERROR_NUM=`cat /database/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
+        export ERROR_NUM=`cat /data/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
         if [ $ERROR_NUM -gt 0 ];then 
         echo "Initialize error,check you initialize!!! " >>$OPERATE_LOG
         fi
@@ -116,7 +116,7 @@ elif [[ $MY_V == "8.0" ]]; then
         ln -s /usr/local/mysql/bin/mysql* /usr/bin/ >/dev/null 2>&1
         cd /usr/local/mysql && ./bin/mysqld --defaults-file=/etc/mysql_$MYSQL_PORT.cnf --initialize-insecure
         sleep 10
-        export ERROR_NUM=`cat /database/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
+        export ERROR_NUM=`cat /data/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
         if [ $ERROR_NUM -gt 0 ];then 
         echo "Initialize error,check you initialize!!! " >>$OPERATE_LOG
         fi
@@ -125,7 +125,7 @@ elif [[ $MY_V == "8.0" ]]; then
         cd /usr/local/mysql
         ./bin/mysqld --defaults-file=/etc/mysql_$MYSQL_PORT.cnf --initialize-insecure
         sleep 10
-        export ERROR_NUM=`cat /database/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
+        export ERROR_NUM=`cat /data/mysql$MYSQL_PORT/data/mysql$MYSQL_PORT.err |grep -w '[ERROR]' |wc -l`
         if [ $ERROR_NUM -gt 0 ];then 
         echo "Initialize error,check you initialize!!! " >>$OPERATE_LOG
         fi

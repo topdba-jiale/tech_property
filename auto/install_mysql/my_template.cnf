@@ -47,7 +47,7 @@ query_cache_type = 0
 ############log settings###################
 expire_logs_days = 30
 slow_query_log = 1
-slow_query_log_file = /database/mysql3306/data/mysql3306-slow.log
+slow_query_log_file = /data/mysql3306/data/mysql3306-slow.log
 long_query_time = 2
 log_output='file,table'
 log_queries_not_using_indexes = 1
@@ -57,9 +57,9 @@ log_throttle_queries_not_using_indexes = 10
 min_examined_row_limit = 100
 
 ############replication settings###################
-relay-log-index = /database/mysql3306/relaylog/mysql3306-relay-bin.index  
-relay-log-info-file = /database/mysql3306/relaylog/mysql3306-relay-bin  
-relay-log = /database/mysql3306/relaylog/mysql3306-relay-log.info 
+relay-log-index = /data/mysql3306/relaylog/mysql3306-relay-bin.index  
+relay-log-info-file = /data/mysql3306/relaylog/mysql3306-relay-bin  
+relay-log = /data/mysql3306/relaylog/mysql3306-relay-log.info 
 log_slave_updates
 slave_skip_errors = ddl_exist_errors
 slave-parallel-type=LOGICAL_CLOCK
@@ -72,15 +72,15 @@ relay_log_info_repository = TABLE #replicate crash-safe
 
 ############file-name settings###################
 socket = /tmp/mysql_3306.sock
-pid-file = /database/mysql3306/data/mysql3306.pid  
-tmpdir=/database/mysql3306/tmp
-datadir = /database/mysql3306/data/  
-log-bin=/database/mysql3306/binlog/mysql3306-bin  
-log-bin-index=/database/mysql3306/binlog/mysql3306-bin.index  
-log-error=/database/mysql3306/data/mysql3306.err
+pid-file = /data/mysql3306/data/mysql3306.pid  
+tmpdir=/data/mysql3306/tmp
+datadir = /data/mysql3306/data/  
+log-bin=/data/mysql3306/binlog/mysql3306-bin  
+log-bin-index=/data/mysql3306/binlog/mysql3306-bin.index  
+log-error=/data/mysql3306/data/mysql3306.err
 
 ############innodb settings###################
-innodb_undo_directory = /database/mysql3306/undolog/
+innodb_undo_directory = /data/mysql3306/undolog/
 innodb_page_size =16384
 innodb_autoinc_lock_mode=2
 innodb_buffer_pool_size = 4G
@@ -103,7 +103,7 @@ innodb_flush_neighbors = 1
 innodb_log_buffer_size =8M
 innodb_log_file_size = 1024M
 innodb_log_files_in_group=3
-innodb_log_group_home_dir = /database/mysql3306/redolog/
+innodb_log_group_home_dir = /data/mysql3306/redolog/
 innodb_purge_threads = 4
 innodb_large_prefix = 1
 innodb_thread_concurrency = 8
