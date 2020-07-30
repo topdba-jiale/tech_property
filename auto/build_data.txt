@@ -1,0 +1,189 @@
+#!/bin/bash
+
+# Usage: ./script start_pos total_rows schema_name
+
+#author=:zhangjiale
+
+user="root"
+
+passwd="123"
+
+#port="3306"
+
+mysql=`which mysql`
+
+#socket="/database/test/data/mysql_test.sock"
+
+socket=`ps -ef|grep mysqld |grep port |awk '{print $(NF-1)}' |awk -F'=' '{print $2}'`
+
+cmd="$mysql -u$user -p$passwd -S$socket -D$3"
+
+
+
+if [ $# -ne 3 ]
+
+then
+
+ echo "Usage: $0 {start_pos} {total_rows} {schema_name} "
+
+ echo "请正确使用参数变量"
+
+ exit 1
+
+fi
+
+
+
+function load(){
+
+ for ((a=1;a<=$2;a++))
+
+ do
+
+   echo $1
+
+ done
+
+ }
+
+totolrows=$2
+
+tables=`$cmd  -e  "show tables"|grep -v  Tables_in_mysql`
+
+for table in $tables
+
+do 
+
+field_num=`$cmd -e "SELECT count(1) from information_schema.COLUMNS WHERE table_schema=\"$3\" and table_name='$table'"|grep -v count `
+
+ #echo $field_num
+
+    for ((startpos=$1;startpos<=$totolrows;startpos++))
+
+        do
+
+        data=`load $startpos $field_num | awk '{for(i=1;i<=NF;i=i+1){a[NR,i]=$i}}END{for(j=1;j<=NF;j++){str=a[1,j];for(i=2;i<=NR;i++){str=str "," a[i,j]}print str}}'`
+
+        $cmd -B -N -e "insert into $table select $data;"
+
+    done
+
+done
+
+
+
+-- 大致使用说明
+
+-- 执行脚本会提示报错信息：
+
+jiale-MacBook-Pro:tmp root# sh load_data.sh            
+
+Usage: load_data.sh {start_pos} {total_rows} {schema_name} 
+
+请正确使用参数变量
+
+
+
+-- 正确使用脚本后，POC库下所有表均会产生 1-10条自增数据。如下：
+
+jiale-MacBook-Pro:tmp root# sh load_data.sh 1 10 poc   
+
+mysql> select * from a;
+
++----+------+
+
+| id | name |
+
++----+------+
+
+|  1 | 1    |
+
+|  2 | 2    |
+
+|  3 | 3    |
+
+|  4 | 4    |
+
+|  5 | 5    |
+
+|  6 | 6    |
+
+|  7 | 7    |
+
+|  8 | 8    |
+
+|  9 | 9    |
+
+| 10 | 10   |
+
++----+------+
+
+10 rows in set (0.01 sec)
+
+
+
+mysql> select * from b;
+
++----+------+---------+
+
+| id | age  | address |
+
++----+------+---------+
+
+|  1 |    1 | 1       |
+
+|  2 |    2 | 2       |
+
+|  3 |    3 | 3       |
+
+|  4 |    4 | 4       |
+
+|  5 |    5 | 5       |
+
+|  6 |    6 | 6       |
+
+|  7 |    7 | 7       |
+
+|  8 |    8 | 8       |
+
+|  9 |    9 | 9       |
+
+| 10 |   10 | 10      |
+
++----+------+---------+
+
+10 rows in set (0.00 sec)
+
+
+
+mysql> select * from c;
+
++------+-------+---------------------+---------+----------+
+
+| id   | count | addtime             | address | relation |
+
++------+-------+---------------------+---------+----------+
+
+|    1 |  1.00 | 0000-00-00 00:00:00 | 1       |        1 |
+
+|    2 |  2.00 | 0000-00-00 00:00:00 | 2       |        2 |
+
+|    3 |  3.00 | 0000-00-00 00:00:00 | 3       |        3 |
+
+|    4 |  4.00 | 0000-00-00 00:00:00 | 4       |        4 |
+
+|    5 |  5.00 | 0000-00-00 00:00:00 | 5       |        5 |
+
+|    6 |  6.00 | 0000-00-00 00:00:00 | 6       |        6 |
+
+|    7 |  7.00 | 0000-00-00 00:00:00 | 7       |        7 |
+
+|    8 |  8.00 | 0000-00-00 00:00:00 | 8       |        8 |
+
+|    9 |  9.00 | 0000-00-00 00:00:00 | 9       |        9 |
+
+|   10 | 10.00 | 0000-00-00 00:00:00 | 10      |       10 |
+
++------+-------+---------------------+---------+----------+
+
+10 rows in set (0.00 sec)
