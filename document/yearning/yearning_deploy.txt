@@ -1,0 +1,222 @@
+yearning install
+
+-- https://github.com/cookieY/Yearning/
+
+-- 整个安装过程如下
+
+-- 首先安装数据库，（利用自动化安装脚本）,并创建yearing数据库
+[root@localhost opt]# ll
+-rw-r--r--. 1 root root 713768650 7月  13 09:18 auto_install_mysql.tar.gz
+-rw-r--r--. 1 root root      7620 4月  26 14:25 install_mysql_single.sh
+-rw-r--r--. 1 root root      1221 4月  26 14:06 install.sh
+-rw-r--r--. 1 root root 724672294 4月  26 14:11 mysql-5.7.28-linux-glibc2.12-x86_64.tar.gz
+-rw-r--r--. 1 root root      4221 4月  26 15:54 my_template.cnf
+drwxr-xr-x. 2 root root         6 9月   7 2017 rh
+-rw-r--r--. 1 root root  12777006 7月  13 09:19 Yearning-2.2.2-4kstars.linux-amd64-patch-1.zip
+[root@localhost opt]# sh install.sh mysql_single
+No MySQL Instance started. choice 3306 port to use.
+Input you will use MySQL-Version{5.7 or 8.0}:5.7
+2020-07-13T01:30:09.545759Z mysqld_safe Logging to '/database/mysql3306/data/mysql3306.err'.
+2020-07-13T01:30:09.596931Z mysqld_safe Starting mysqld daemon with databases from /database/mysql3306/data
+[root@localhost opt]# 
+[root@localhost opt]# ps -ef|grep mysqld|grep -v grep 
+root     10063     1  0 09:30 pts/1    00:00:00 /bin/sh ./bin/mysqld_safe --defaults-file=/etc/mysql_3306.cnf --user=mysql
+mysql    11468 10063  1 09:30 pts/1    00:00:00 /usr/local/mysql/bin/mysqld --defaults-file=/etc/mysql_3306.cnf --basedir=/usr/local/mysql --datadir=/database/mysql3306/data --plugin-dir=/usr/local/mysql/lib/plugin --user=mysql --log-error=/database/mysql3306/data/mysql3306.err --open-files-limit=65000 --pid-file=/database/mysql3306/data/mysql3306.pid --socket=/tmp/mysql_3306.sock --port=3306
+
+[root@localhost opt]# 
+[root@localhost opt]# mysql -uroot -p -S /tmp/mysql_3306.sock
+Enter password: 
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MySQL connection id is 5
+Server version: 5.7.28-log MySQL Community Server (GPL)
+
+Copyright (c) 2000, 2017, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MySQL [(none)]> grant all on *.* to root@'%' identified by 'root@qunje' with grant option;          
+Query OK, 0 rows affected, 1 warning (0.03 sec)
+
+MySQL [(none)]>  grant all on *.* to yearning@localhost identified by 'Yearning123';
+Query OK, 0 rows affected, 2 warnings (0.04 sec)
+
+MySQL [(none)]>  grant all on *.* to yearning@127.0.0.1 identified by 'Yearning123';       
+Query OK, 0 rows affected, 1 warning (0.06 sec)
+
+MySQL [(none)]> 
+MySQL [(none)]> 
+MySQL [(none)]> create database yearning;
+Query OK, 1 row affected (0.04 sec)
+
+
+
+
+-- 下载yearing package
+
+[root@localhost opt]# wget https://github.com/cookieY/Yearning/releases/download/v2.2.2/Yearning-2.2.2-4kstars.linux-amd64-patch-1.zip
+正在解析主机 github.com (github.com)... 失败：未知的名称或服务。
+wget: 无法解析主机地址 “github.com”
+
+-- 由于未配置域名解析服务
+[root@localhost opt]# ping www.baidu.com
+ping: www.baidu.com: 未知的名称或服务
+[root@localhost opt]# 
+[root@localhost opt]# export LANG=en_US.UTF-8
+
+[root@localhost opt]# vi /etc/resolv.conf
+[root@localhost opt]# cat /etc/resolv.conf
+nameserver 8.8.8.8
+nameserver 114.114.114.114
+
+[root@localhost opt]# 
+[root@localhost opt]# systemctl restart network
+[root@localhost opt]# 
+[root@localhost opt]# ping www.baidu.com
+PING www.wshifen.com (103.235.46.39) 56(84) bytes of data.
+64 bytes from 103.235.46.39 (103.235.46.39): icmp_seq=1 ttl=48 time=204 ms
+64 bytes from 103.235.46.39 (103.235.46.39): icmp_seq=2 ttl=48 time=203 ms
+
+
+
+[root@localhost opt]# unzip Yearning-2.2.2-4kstars.linux-amd64-patch-1.zip 
+
+-- 修改相关配置如下
+[root@localhost Yearning-go]# cat conf.toml 
+[Mysql]
+Db = "yearning"
+Host = "127.0.0.1"
+Port = "3306"
+Password = "Yearning123"
+User = "yearning"
+
+[General]
+SecretKey = "Yearningqunjecom"
+Hours = 4
+
+-- 初始化服务
+[root@localhost Yearning-go]# ./Yearning -m 
+
+(/var/jenkins_home/workspace/Yearning-go/src/service/migrate.go:32) 
+[2020-07-13 09:42:26]  [19.52ms]  INSERT INTO `core_accounts` (`username`,`password`,`rule`,`department`,`real_name`,`email`) VALUES ('admin','pbkdf2_sha256$120000$2dXxZJDGcf37$uM0CX0G/i0NP7SLUyiXkPuSzFTsiNpWGAcfg1L8d2t0=','admin','DBA','超级管理员','')  
+[1 rows affected or returned ] 
+
+(/var/jenkins_home/workspace/Yearning-go/src/service/migrate.go:40) 
+[2020-07-13 09:42:27]  [16.50ms]  INSERT INTO `core_global_configurations` (`authorization`,`ldap`,`message`,`other`,`stmt`,`audit_role`,`board`) VALUES ('global','{"url":"","user":"","password":"","type":1,"sc":"","ldaps":false}','{"web_hook":"","host":"","port":25,"user":"","password":"","to_user":"","mail":false,"ding":false,"ssl":false,"push_type":false}','{"limit":"1000","idc":["Aliyun","AWS"],"multi":false,"query":false,"exclude_db_list":[],"insulate_word_list":[],"register":false,"export":false,"per_order":2,"ex_query_time":60,"query_timeout":0}',0,'{"DMLInsertColumns":false,"DMLMaxInsertRows":10,"DMLWhere":false,"DMLOrder":false,"DMLSelect":false,"DDLCheckTableComment":false,"DDlCheckColumnComment":false,"DDLCheckColumnNullable":false,"DDLCheckColumnDefault":false,"DDLTimeFieldDefault":false,"DDLEnableAcrossDBRename":false,"DDLEnableAutoincrementInit":false,"DDLEnableAutoIncrement":false,"DDLEnableAutoincrementUnsigned":false,"DDLEnableDropTable":false,"DDLEnableDropDatabase":false,"DDLEnableNullIndexName":false,"DDLIndexNameSpec":false,"DDLMaxKeyParts":5,"DDLMaxKey":5,"DDLMaxCharLength":10,"MaxTableNameLen":10,"MaxAffectRows":1000,"MaxDDLAffectRows":0,"SupportCharset":"","SupportCollation":"","CheckIdentifier":false,"MustHaveColumns":"","DDLMultiToSubmit":false,"DDLPrimaryKeyMust":false,"DDLAllowColumnType":false,"DDLImplicitTypeConversion":false,"DDLAllowPRINotInt":false,"DDLColumnsMustHaveIndex":"","DDLAllowChangeColumnPosition":false,"IsOSC":false,"OscBinDir":"","OscDropNewTable":false,"OscDropOldTable":false,"OscCheckReplicationFilters":false,"OscCheckAlter":false,"OscAlterForeignKeysMethod":"rebuild_constraints","OscMaxLag":1,"OscRecursionMethod":"processlist","OscCheckInterval":1,"OscMaxThreadConnected":25,"OscMaxThreadRunning":25,"OscCriticalThreadConnected":20,"OscCriticalThreadRunning":20,"OscPrintSql":false,"OscChunkTime":0.5,"OscSize":0,"AllowCreateView":false,"AllowCreatePartition":false,"AllowSpecialType":false,"AllowForeignKey":false,"PRIRollBackErr":false}','')  
+[1 rows affected or returned ] 
+
+(/var/jenkins_home/workspace/Yearning-go/src/service/migrate.go:47) 
+[2020-07-13 09:42:27]  [15.68ms]  INSERT INTO `core_graineds` (`username`,`rule`,`permissions`,`group`) VALUES ('admin','','{"ddl":"1","ddl_source":[],"dml":"1","dml_source":[],"user":"1","base":"1","auditor":[],"query":"1","query_source":[]}','["admin"]')  
+[1 rows affected or returned ] 
+
+(/var/jenkins_home/workspace/Yearning-go/src/service/migrate.go:52) 
+[2020-07-13 09:42:27]  [15.43ms]  INSERT INTO `core_role_groups` (`name`,`permissions`) VALUES ('admin','{"ddl":"1","ddl_source":[],"dml":"1","dml_source":[],"user":"1","base":"1","auditor":[],"query":"1","query_source":[]}')  
+[1 rows affected or returned ] 
+初始化成功!
+ 用户名: admin
+密码:Yearning_admin
+
+
+
+[root@localhost Yearning-go]# ./Yearning -s -b "192.168.2.221" -p "8000" &
+[1] 11708
+[root@localhost Yearning-go]# 检查更新.......
+数据已更新!
+
+    __  __          
+    _ \/ /_________ 
+    __  /_  _ \  _ \
+    _  / /  __/  __/
+    /_/  \___/\___/   yee v0.1.2
+-----Easier and Faster-----
+Creator: Henry Yee
+
+
+
+[root@localhost Yearning-go]# systemctl status firewalld 
+● firewalld.service - firewalld - dynamic firewall daemon
+   Loaded: loaded (/usr/lib/systemd/system/firewalld.service; enabled; vendor preset: enabled)
+   Active: active (running) since Thu 2020-07-09 18:18:10 CST; 3 days ago
+     Docs: man:firewalld(1)
+ Main PID: 1008 (firewalld)
+   CGroup: /system.slice/firewalld.service
+           └─1008 /usr/bin/python -Es /usr/sbin/firewalld --nofork --nopid
+
+Jul 09 18:18:10 localhost.localdomain systemd[1]: Starting firewalld - dynamic firewall daemon...
+Jul 09 18:18:10 localhost.localdomain systemd[1]: Started firewalld - dynamic firewall daemon.
+[root@localhost Yearning-go]# systemctl stop firewalld  
+
+
+-- 浏览器访问URL http://192.168.2.221:8000/
+
+
+-- 设置 >>> 添加环境 >>> local_machine
+
+-- 修改 admin 密码:Admin@qunje2020
+
+-- 用户 >>> 添加用户 >>> zhangjiale:Zhangjiale@qunje2020     -审核人
+-- 用户 >>> 添加用户 >>> liucheng:Liucheng@qunje2020         -提交人
+-- 用户 >>> 添加用户 >>> linzhiyuan:Linzhiyuan@qunje2020     -提交人
+-- 用户 >>> 添加用户 >>> wangjunhua:Wangjunhua@qunje2020     -提交人
+-- 用户 >>> 添加用户 >>> hongxiang:Hongxiang@qunje2020       -提交人
+-- 用户 >>> 添加用户 >>> gongyuejun:Gonghyuejun@qunje2020    -提交人
+-- 用户 >>> 添加用户 >>> shigongwen:Shigongwen@qunje2020     -提交人
+-- 用户 >>> 添加用户 >>> pangyihong:Pangyihong@qunje2020     -提交人
+
+
+
+-- 数据库 >>> 环境:local_machine 名称:192.168.2.220_v5        地址:192.168.2.220 端口:3306 用户名:yearning 密码:Yearning123
+-- 数据库 >>> 环境:local_machine 名称:192.168.2.220_ai        地址:192.168.2.220 端口:3307 用户名:yearning 密码:Yearning123
+-- 数据库 >>> 环境:local_machine 名称:192.168.2.220_v3        地址:192.168.2.220 端口:3308 用户名:yearning 密码:Yearning123
+-- 数据库 >>> 环境:local_machine 名称:192.168.2.220_sealhome  地址:192.168.2.220 端口:3309 用户名:yearning 密码:Yearning123
+ 
+-- 权限组 >>> 名称:developer_v5        连接名:192.168.2.220_v5
+-- 权限组 >>> 名称:developer_ai        连接名:192.168.2.220_ai
+-- 权限组 >>> 名称:developer_v3        连接名:192.168.2.220_v3
+-- 权限组 >>> 名称:developer_sealhome  连接名:192.168.2.220_sealhome
+
+
+-- 用户权限 >>> 用户名:liucheng   权限组:developer_v5
+-- 用户权限 >>> 用户名:linzhiyuan 权限组:developer_ai
+-- 用户权限 >>> 用户名:wangjunhua 权限组:developer_ai
+-- 用户权限 >>> 用户名:hongxiang  权限组:developer_v3
+-- 用户权限 >>> 用户名:gongyuejun 权限组:developer_sealhome
+
+
+
+开发环境，测试环境，预发布/正式 ---一个实例对应三个schema
+
+浏览器访问URL http://192.168.2.221:8000/
+chenzhen:Chenzhen@qunje2020
+
+
+浏览器访问URL http://192.168.2.221:8000/
+linzhiyuan:Linzhiyuan@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+wangjunhua:Wangjunhua@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+hongxiang:Hongxiang@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+gongyuejun:Gonghyuejun@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+shigongwen:Shigongwen@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+pangyihong:Pangyihong@qunje2020
+
+
+浏览器访问URL http://192.168.2.221:8000/
+caichuandao:Caichuandao@qunje2020
+
+浏览器访问URL http://192.168.2.221:8000/
+zhangtao:Zhangtao@qunje2020
+
+
+
+
+
+
+
