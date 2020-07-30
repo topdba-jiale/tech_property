@@ -1,0 +1,258 @@
+mysql flashback 闪回数据案例
+
+--参考
+https://severalnines.com/database-blog/using-mariadb-flashback-mysql-server
+https://mydbops.wordpress.com/2019/05/22/flashback-recovery-in-mariadb-mysql-percona/
+
+
+
+mysql> select * from t_role;
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+| id                                   | title  | company_id                           | creator                              | create_date         | parent_id     | remark |
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+| 654fc453-9e9b-4cc9-8cae-2cfc4839b914 | 测试   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 18:56:52 | 1571820838568 | 测试   |
+| a3f7f13c-42c7-4cc5-9b18-13dff7920b86 | aaa    | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 20:11:26 | 3             | aaa    |
+| bb4db2d2-bbad-4728-be3b-b16eef5f9c4c | 领导   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 17:47:36 | 1568884146230 | 领导   |
+| d23fd81e-fbe8-42e4-a219-74bdbea95975 | 员工   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-03-19 14:01:36 | 1571820838568 | 员工   |
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+4 rows in set (0.00 sec)
+
+
+mysql> delete from jiale.t_role;
+Query OK, 4 rows affected (0.07 sec)
+
+mysql> select * from t_role;
+Empty set (0.00 sec)
+
+mysql> show master status;
++----------------------+----------+--------------+------------------+---------------------------------------------+
+| File                 | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                           |
++----------------------+----------+--------------+------------------+---------------------------------------------+
+| mysql3307-bin.000002 |  1701150 |              |                  | 5a457397-8379-11ea-b1c1-e454e8ca3c54:1-1423 |
++----------------------+----------+--------------+------------------+---------------------------------------------+
+1 row in set (0.00 sec)
+
+
+-- 第一次先大致找到误操作所在的position
+/usr/local/mysql57/bin/mysqlbinlog -v --base64-output=decode-rows /database/mysql3307/binlog/mysql3307-bin.000002 >/tmp/binlog02.sql
+
+-- vi /tmp/binlog02.sql  
+
+# at 1700263
+# at 1700328
+#200424 10:55:11 server id 1  end_log_pos 1700401 CRC32 0x8f187703      Query   thread_id=87    exec_time=0     error_code=0
+SET TIMESTAMP=1587696911/*!*/;
+BEGIN
+/*!*/;
+# at 1700401
+# at 1700449
+#200424 10:55:11 server id 1  end_log_pos 1700518 CRC32 0xefe5322f      Table_map: `jiale`.`t_role` mapped to number 198
+# at 1700328
+#200424 10:55:11 server id 1  end_log_pos 1700401 CRC32 0x8f187703      Query   thread_id=87    exec_time=0     error_code=0
+SET TIMESTAMP=1587696911/*!*/;
+BEGIN
+/*!*/;
+# at 1700401
+# at 1700449
+#200424 10:55:11 server id 1  end_log_pos 1700518 CRC32 0xefe5322f      Table_map: `jiale`.`t_role` mapped to number 198
+# at 1700518
+#200424 10:55:11 server id 1  end_log_pos 1701119 CRC32 0x64f17128      Delete_rows: table id 198 flags: STMT_END_F
+### DELETE FROM `jiale`.`t_role`
+### WHERE
+###   @1='654fc453-9e9b-4cc9-8cae-2cfc4839b914'
+###   @2='测试'
+###   @3='abdeec7b-647a-48c3-b414-3b9bdd6e0a40'
+###   @4='71a5c292-68b4-407c-9a3d-ec61bc4bebe5'
+###   @5='2020-04-23 18:56:52'
+###   @6='1571820838568'
+###   @7='测试'
+### DELETE FROM `jiale`.`t_role`
+### WHERE
+###   @1='a3f7f13c-42c7-4cc5-9b18-13dff7920b86'
+###   @2='aaa'
+###   @3='abdeec7b-647a-48c3-b414-3b9bdd6e0a40'
+###   @4='71a5c292-68b4-407c-9a3d-ec61bc4bebe5'
+###   @5='2020-04-23 20:11:26'
+###   @6='3'
+###   @7='aaa'
+### DELETE FROM `jiale`.`t_role`
+### WHERE
+###   @1='bb4db2d2-bbad-4728-be3b-b16eef5f9c4c'
+###   @2='领导'
+###   @3='abdeec7b-647a-48c3-b414-3b9bdd6e0a40'
+###   @4='71a5c292-68b4-407c-9a3d-ec61bc4bebe5'
+###   @5='2020-04-23 17:47:36'
+###   @6='1568884146230'
+###   @7='领导'
+### DELETE FROM `jiale`.`t_role`
+### WHERE
+###   @1='d23fd81e-fbe8-42e4-a219-74bdbea95975'
+###   @2='员工'
+###   @3='abdeec7b-647a-48c3-b414-3b9bdd6e0a40'
+###   @4='71a5c292-68b4-407c-9a3d-ec61bc4bebe5'
+###   @5='2020-03-19 14:01:36'
+###   @6='1571820838568'
+###   @7='员工'
+# at 1701119
+#200424 10:55:11 server id 1  end_log_pos 1701150 CRC32 0x1983a9a4      Xid = 7981
+COMMIT/*!*/;
+
+
+
+-- 确认具体位置，无效。
+/usr/local/mysql57/bin/mysqlbinlog -v --base64-output=decode-rows --skip-gtids --start-position=1700401 --stop-position=1701150 /database/mysql3307/binlog/mysql3307-bin.000002 >/tmp/binlog_nogtids.sql
+
+
+
+-- 确认具体位置,利用mariadb10.2+自带回滚功能 ，回滚所需代码段
+[root@192 mariadb-10.4.10-linux-glibc_214-x86_64]# /usr/local/mariadb-10.4.10-linux-glibc_214-x86_64/bin/mysqlbinlog -v --flashback --start-position=1700401 --stop-position=1701150 /database/mysql3307/binlog/mysql3307-bin.000002 >/tmp/flashback.sql
+
+
+
+-- 报错，数据未正常回滚 。
+mysql> source /tmp/flashback.sql;
+Connection id:    106
+Current database: jiale
+
+Query OK, 0 rows affected (0.01 sec)
+
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+ERROR 1782 (HY000): @@SESSION.GTID_NEXT cannot be set to ANONYMOUS when @@GLOBAL.GTID_MODE = ON.
+ERROR 1782 (HY000): @@SESSION.GTID_NEXT cannot be set to ANONYMOUS when @@GLOBAL.GTID_MODE = ON.
+ERROR 1782 (HY000): @@SESSION.GTID_NEXT cannot be set to ANONYMOUS when @@GLOBAL.GTID_MODE = ON.
+ERROR 1782 (HY000): @@SESSION.GTID_NEXT cannot be set to ANONYMOUS when @@GLOBAL.GTID_MODE = ON.
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> select * from t_role;
+Empty set (0.00 sec)
+
+mysql> show variables like '%gtid%';
++----------------------------------+--------------------+
+| Variable_name                    | Value              |
++----------------------------------+--------------------+
+| binlog_gtid_simple_recovery      | ON                 |
+| enforce_gtid_consistency         | ON                 |
+| gtid_executed                    |                    |
+| gtid_executed_compression_period | 1000               |
+| gtid_mode                        | ON                 |
+| gtid_next                        | NOT_YET_DETERMINED |
+| gtid_owned                       |                    |
+| gtid_purged                      |                    |
+| session_track_gtids              | OFF                |
++----------------------------------+--------------------+
+9 rows in set (0.00 sec)
+
+-- 查看binlog event。⚠️ 回滚段需要包括gtid_pos
+mysql> show binlog events in 'mysql3307-bin.000002' from 1700232 limit 8;
++----------------------+---------+-------------+-----------+-------------+----------------------------------------------------------------------+
+| Log_name             | Pos     | Event_type  | Server_id | End_log_pos | Info                                                                 |
++----------------------+---------+-------------+-----------+-------------+----------------------------------------------------------------------+
+| mysql3307-bin.000002 | 1700232 | Xid         |         1 |     1700263 | COMMIT /* xid=7974 */                                                |
+| mysql3307-bin.000002 | 1700263 | Gtid        |         1 |     1700328 | SET @@SESSION.GTID_NEXT= '5a457397-8379-11ea-b1c1-e454e8ca3c54:1423' |
+| mysql3307-bin.000002 | 1700328 | Query       |         1 |     1700401 | BEGIN                                                                |
+| mysql3307-bin.000002 | 1700401 | Rows_query  |         1 |     1700449 | # delete from jiale.t_role                                           |
+| mysql3307-bin.000002 | 1700449 | Table_map   |         1 |     1700518 | table_id: 198 (jiale.t_role)                                         |
+| mysql3307-bin.000002 | 1700518 | Delete_rows |         1 |     1701119 | table_id: 198 flags: STMT_END_F                                      |
+| mysql3307-bin.000002 | 1701119 | Xid         |         1 |     1701150 | COMMIT /* xid=7981 */                                                |
+| mysql3307-bin.000002 | 1701150 | Gtid        |         1 |     1701215 | SET @@SESSION.GTID_NEXT= '5a457397-8379-11ea-b1c1-e454e8ca3c54:1424' |
++----------------------+---------+-------------+-----------+-------------+----------------------------------------------------------------------+
+8 rows in set (0.00 sec)
+
+
+-- 经过排查确认需要先关闭gtid_mode。 关闭后可正确导入回滚数据。
+mysql> set gtid_mode=off;
+ERROR 1229 (HY000): Variable 'gtid_mode' is a GLOBAL variable and should be set with SET GLOBAL
+mysql> set global gtid_mode=off;
+ERROR 1788 (HY000): The value of @@GLOBAL.GTID_MODE can only be changed one step at a time: OFF <-> OFF_PERMISSIVE <-> ON_PERMISSIVE <-> ON. Also note that this value must be stepped up or down simultaneously on all servers. See the Manual for instructions.
+mysql> set global gtid_mode=ON_PERMISSIVE;
+Query OK, 0 rows affected (0.22 sec)
+
+mysql> set global gtid_mode=OFF_PERMISSIVE;
+Query OK, 0 rows affected (0.22 sec)
+
+mysql> set global gtid_mode=OFF;
+Query OK, 0 rows affected (0.19 sec)
+
+mysql> source /tmp/flashback_new.sql;
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.08 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+ERROR 1193 (HY000): Unknown system variable 'check_constraint_checks'
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Charset changed
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+Query OK, 0 rows affected (0.07 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+mysql> select * from jiale.t_role;
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+| id                                   | title  | company_id                           | creator                              | create_date         | parent_id     | remark |
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+| 654fc453-9e9b-4cc9-8cae-2cfc4839b914 | 测试   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 18:56:52 | 1571820838568 | 测试   |
+| a3f7f13c-42c7-4cc5-9b18-13dff7920b86 | aaa    | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 20:11:26 | 3             | aaa    |
+| bb4db2d2-bbad-4728-be3b-b16eef5f9c4c | 领导   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-04-23 17:47:36 | 1568884146230 | 领导   |
+| d23fd81e-fbe8-42e4-a219-74bdbea95975 | 员工   | abdeec7b-647a-48c3-b414-3b9bdd6e0a40 | 71a5c292-68b4-407c-9a3d-ec61bc4bebe5 | 2020-03-19 14:01:36 | 1571820838568 | 员工   |
++--------------------------------------+--------+--------------------------------------+--------------------------------------+---------------------+---------------+--------+
+4 rows in set (0.00 sec)
+
+mysql> set global gtid_mode=on ;
+ERROR 1788 (HY000): The value of @@GLOBAL.GTID_MODE can only be changed one step at a time: OFF <-> OFF_PERMISSIVE <-> ON_PERMISSIVE <-> ON. Also note that this value must be stepped up or down simultaneously on all servers. See the Manual for instructions.
+mysql> set global gtid_mode=OFF_PERMISSIVE;
+Query OK, 0 rows affected (0.21 sec)
+
+mysql> set global gtid_mode=ON_PERMISSIVE;
+Query OK, 0 rows affected (0.20 sec)
+
+mysql> set global gtid_mode=ON;
+Query OK, 0 rows affected (0.19 sec)
+
+
+
+
+
+
+
+
+
