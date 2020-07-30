@@ -1,0 +1,199 @@
+ mongodb 
+
+-- 192.168.2.221 
+-- wget https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-4.2.5.tgz
+curl -O  https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel70-4.2.5.tgz
+tar xvf /usr/local/mongodb-linux-x86_64-rhel70-4.2.5.tgz 
+ln -s mongodb-linux-x86_64-rhel70-4.2.5 mongodb
+ln -s /usr/local/mongodb/bin/* /usr/bin/
+export PATH=$PATH:/usr/local/mongodb/bin/
+mkdir -p /database/mongodb/{data,log,run}
+groupadd mongodb
+useradd -s /sbin/nologin -g mongodb -M mongodb
+chown -R mongodb.mongodb /database/mongodb
+
+
+cat <<EOF >/etc/mongodb.conf
+bind_ip=0.0.0.0
+port=27017
+dbpath=/database/mongodb/data/
+logpath=/database/mongodb/log/mongodb.log
+pidfilepath =/database/mongodb/run/mongodb.pid
+logappend=true
+fork=true 
+maxConns=500
+noauth = true
+EOF
+
+
+[root@localhost local]# mongod -f /etc/mongodb.conf 
+about to fork child process, waiting until server is ready for connections.
+forked process: 6734
+child process started successfully, parent exiting
+[root@localhost local]# 
+[root@localhost local]# 
+[root@localhost local]# ps -ef|grep mongodb
+root      6734     1  5 09:45 ?        00:00:00 mongod -f /etc/mongodb.conf
+root      6768 24984  0 09:45 pts/0    00:00:00 grep --color=auto mongodb
+[root@localhost local]# mongo
+MongoDB shell version v4.2.5
+connecting to: mongodb://127.0.0.1:27017/?compressors=disabled&gssapiServiceName=mongodb
+Implicit session: session { "id" : UUID("fa743cfd-99d6-4e4d-a3ed-58dd907d8519") }
+MongoDB server version: 4.2.5
+Welcome to the MongoDB shell.
+For interactive help, type "help".
+For more comprehensive documentation, see
+        http://docs.mongodb.org/
+Questions? Try the support group
+        http://groups.google.com/group/mongodb-user
+Server has startup warnings: 
+2020-04-15T09:45:19.105+0800 I  CONTROL  [initandlisten] ** WARNING: You are running this process as the root user, which is not recommended.
+2020-04-15T09:45:19.105+0800 I  CONTROL  [initandlisten] 
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] 
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] ** WARNING: /sys/kernel/mm/transparent_hugepage/enabled is 'always'.
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] **        We suggest setting it to 'never'
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] 
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] ** WARNING: /sys/kernel/mm/transparent_hugepage/defrag is 'always'.
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] **        We suggest setting it to 'never'
+2020-04-15T09:45:19.107+0800 I  CONTROL  [initandlisten] 
+---
+Enable MongoDB's free cloud-based monitoring service, which will then receive and display
+metrics about your deployment (disk utilization, CPU, operation statistics, etc).
+
+The monitoring data will be available on a MongoDB website with a unique URL accessible to you
+and anyone you share the URL with. MongoDB may use this information to make product
+improvements and to suggest MongoDB products and deployment options to you.
+
+To enable free monitoring, run the following command: db.enableFreeMonitoring()
+To permanently disable this reminder, run the following command: db.disableFreeMonitoring()
+---
+
+> 
+> 
+> show dbs
+admin   0.000GB
+config  0.000GB
+local   0.000GB
+> db.enableFreeMonitoring()
+{
+        "state" : "enabled",
+        "message" : "To see your monitoring data, navigate to the unique URL below. Anyone you share the URL with will also be able to view this page. You can disable monitoring at any time by running db.disableFreeMonitoring().",
+        "url" : "https://cloud.mongodb.com/freemonitoring/cluster/7UXRSY623ZMJRA75MMZVK6YUUMSW4AVO",
+        "userReminder" : "",
+        "ok" : 1
+}
+
+> db.fruit.insertOne({"name":"apple"})
+{
+        "acknowledged" : true,
+        "insertedId" : ObjectId("5e966fc01077405e18027c26")
+}
+> show collections;
+fruit
+> db.fruit.find()
+{ "_id" : ObjectId("5e966fc01077405e18027c26"), "name" : "apple" }
+> db.fruit.find({"name":/^a/})
+{ "_id" : ObjectId("5e966fc01077405e18027c26"), "name" : "apple" }
+> db.fruit.insertOne({name:"pear",from:{coutry:"china",provice:"jiangsu"}})
+{
+        "acknowledged" : true,
+        "insertedId" : ObjectId("5e96736e1077405e18027c27")
+}
+> db.fruit.find()
+{ "_id" : ObjectId("5e966fc01077405e18027c26"), "name" : "apple" }
+{ "_id" : ObjectId("5e96736e1077405e18027c27"), "name" : "pear", "from" : { "coutry" : "china", "provice" : "jiangsu" } }
+> db.fruit.find({"from.coutry":"china"})
+{ "_id" : ObjectId("5e96736e1077405e18027c27"), "name" : "pear", "from" : { "coutry" : "china", "provice" : "jiangsu" } }
+> 
+
+> db.fruit.insertMany([{name:"apple",color:["red","green"]},{name:"mango",color:["yellow","green"]}])
+{
+        "acknowledged" : true,
+        "insertedIds" : [
+                ObjectId("5e9683881077405e18027c28"),
+                ObjectId("5e9683881077405e18027c29")
+        ]
+}
+
+> db.fruit.find({$or:[{color:"yellow"},{color:"green"}]})
+{ "_id" : ObjectId("5e9683881077405e18027c28"), "name" : "apple", "color" : [ "red", "green" ] }
+{ "_id" : ObjectId("5e9683881077405e18027c29"), "name" : "mango", "color" : [ "yellow", "green" ] }
+> 
+> db.fruit.find({$or:[{color:"yellow"},{color:"green"}]},{"_id":0,name:1})
+{ "name" : "apple" }
+{ "name" : "mango" }
+> 
+> db.fruit.find({$or:[{color:"yellow"},{color:"green"}]}).pretty()
+{
+        "_id" : ObjectId("5e9683881077405e18027c28"),
+        "name" : "apple",
+        "color" : [
+                "red",
+                "green"
+        ]
+}
+{
+        "_id" : ObjectId("5e9683881077405e18027c29"),
+        "name" : "mango",
+        "color" : [
+                "yellow",
+                "green"
+        ]
+}
+> 
+
+> db.fruit.updateOne({name:"pear"},{$set:{"age":"28"}})
+{ "acknowledged" : true, "matchedCount" : 1, "modifiedCount" : 1 }
+> 
+>  db.fruit.find().pretty();
+{ "_id" : ObjectId("5e966fc01077405e18027c26"), "name" : "apple" }
+{
+        "_id" : ObjectId("5e96736e1077405e18027c27"),
+        "name" : "pear",
+        "from" : {
+                "coutry" : "china",
+                "provice" : "jiangsu"
+        },
+        "age" : "28"
+}
+{
+        "_id" : ObjectId("5e9683881077405e18027c28"),
+        "name" : "apple",
+        "color" : [
+                "red",
+                "green"
+        ]
+}
+{
+        "_id" : ObjectId("5e9683881077405e18027c29"),
+        "name" : "mango",
+        "color" : [
+                "yellow",
+                "green"
+        ]
+}
+> 
+
+
+mongo --host mongodb://admin:admin7unje@127.0.0.1:26178/ --authenticationDatabase admin
+mongo --host mongodb://admin:admin7unje@139.196.98.29:26178/ --authenticationDatabase admin
+
+db.createUser({user: "qjUser",pwd: "JSqj@1qaz2wsx",roles: [ { role: "readWrite", db: "qjCloudService" } ]})
+
+mongo --host mongodb://qjUser:JSqj@1qaz2wsx@127.0.0.1:26178/ --authenticationDatabase admin
+
+mongo -u qjUser -p --port=26178 --authenticationDatabase admin
+
+db.auth("qjUser","JSqj@1qaz2wsx")
+
+
+db.createUser({
+  user: "qjUser",
+  pwd: "JSqj@1qaz2wsx",
+  roles: {
+    { role: "readWrite": db: "qjCloudService" }
+  }
+})
+
+show users;
+
