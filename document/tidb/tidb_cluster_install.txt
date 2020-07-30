@@ -1,0 +1,146 @@
+mkfs.ext4 /dev/vdb
+
+mount -o remount,rw /dev/vdb /database
+
+mount /dev/vdb /database/
+
+systemctl status ntpd.service
+
+yum install epel-release
+
+yum install ansible curl
+
+useradd tidb
+
+passwd tidb
+
+su - tidb
+
+cd /home/tidb/
+
+git clone -b release-1.0 https://github.com/pingcap/tidb-ansible.git
+
+ssh-keygen -t rsa
+
+cd /home/tidb/tidb-ansible
+
+cat hosts.ini
+
+cat changehostname.yml   --    配置集群主机名
+
+ansible-playbook -i hosts.ini-test changehostname.yml -k   --修改集群内机器hostname 
+
+ansible-playbook -i hosts.ini create_users.yml -k. -- 执行以下命令，按提示输入部署目标机器 root 密码
+
+ansible -i inventory.ini all -m shell -a 'whoami' -- 执行以下命令如果所有 server 返回 tidb 表示 ssh 互信配置成功。
+
+ansible -i inventory.ini all -m shell -a 'whoami' -b -- 执行以下命令如果所有 server 返回 root 表示 tidb 用户 sudo 免密码配置成功。
+
+ansible-playbook local_prepare.yml -- 执行 local_prepare.yml，联网下载 TiDB binary 到中控机
+
+ansible-playbook bootstrap.yml -- 初始化系统环境，修改内核参数
+
+echo "/dev/vdb /database ext4 defaults,nodelalloc,noatime 0 2" >>/etc/fstab -- nodelalloc 是必选参数，否则 Ansible 安装时检测无法通过
+
+umount /database/
+
+fuser /database/deploy/
+
+kill -9 3713
+
+umount /database/
+
+mount -a
+
+ansible-playbook deploy.yml >/tmp/deploy.log -- 部署TiDB 集群软件
+
+ansible-playbook start.yml -- 启动TiDB 集群
+
+
+
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz --下载TiDB工具集 压缩包
+
+cd /home/tidb/tidb-ansible/downloads
+
+tar xzvf tidb-enterprise-tools-latest-linux-amd64.tar.gz 
+
+cd tidb-enterprise-tools-latest-linux-amd64
+
+
+
+
+
+./bin/checker -host 127.0.0.1 -port 33061 -user zhangjl -password zhangjl@che2017 chezhibao -- 备份前先检测chezhibao库表权限
+
+
+
+./bin/mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -F 64 -B test -T a --skip-tz-utc -o /database/deploy/backup/backup_test_180307 -- 50服务备份51服务数据
+
+
+
+./bin/loader -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -d /database/deploy/backup/backup_test_180307  >/tmp/output_180308.log --向TiDB恢复数据
+
+
+
+
+
+sysbench --test=oltp --mysql-table-engine=innodb --oltp-table-size=10000000 --mysql-socket=/tmp/mysql_test.sock --mysql-user=zhangjl --mysql-host=localhost --mysql-password=zhangjl@che2017 --mysql-db=test prepare
+
+sysbench --test=oltp --mysql-host=localhost  --mysql-socket='/tmp/mysql_test.sock' --mysql-user='zhangjl' --mysql-password='zhangjl@che2017'  --num-threads=16  --report-interval=10  --max-time=300 --max-requests=0 --percentile=99 --mysql-db='test' run
+
+mysqlslap -uzhangjl -p*** -h10.100.16.50 -P3307 --iterations=1 --concurrency=16,32,64 --number-of-queries=100 --create-schema=test -a
+
+mysqlslap -utidb -ptidb -h10.100.16.51 -P4000 --iterations=1 --concurrency=16,32,64 --number-of-queries=100 --create-schema=test -a
+
+
+
+
+
+
+
+ansible-playbook bootstrap.yml -l 10.100.16.50 -- 初始化新增TiDB节点
+
+ansible-playbook deploy.yml -l 10.100.16.50 -- 部署新增TiDB节点：
+
+ansible-playbook start.yml -l 10.100.16.50 -- 启动新节点服务：
+
+ansible-playbook rolling_update_monitor.yml --tags=prometheus    -- 更新 Prometheus 配置并重启：
+
+
+
+-- 可以修改监控模版定义,确保如下文件配置名一致。
+
+vi inventory.ini     --  cluster_name = chezhibao-cluster
+
+/database/deploy/conf/alert.rules.yml    --  env: chezhibao-cluster
+
+/database/deploy/conf/prometheus.yml  --  cluster: 'chezhibao-cluster' 
+
+
+cat syncer.meta  -- 配置增量同步
+
+cat config.toml  -- 配置增量同步配置文件
+
+./bin/syncer -config config.toml  -- 开启同步
+
+
+#备份crm库表分别至crm-rule,crm-track库
+
+./bin/mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -F 64 -B crm  -T t_ahead_param,t_auto_data_level,t_auto_data_mapping,t_auto_rule,t_auto_users,t_auto_users_detail,t_auto_users_level,t_auto_users_mapping,t_customer_config,t_customer_service_rule_param,t_recycle_rule,t_store_service --skip-tz-utc -o /database/deploy/backup/crmrule_180329
+
+
+
+cd /database/deploy/backup/crmrule_180329
+
+rename crm crm-rule *
+
+truncate table tidb_loader.checkpoint;
+
+./bin/loader -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -d /database/deploy/backup/crmrule_180329
+
+
+./bin/mydumper -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -F 64 -B crm  -T t_ahead_record,t_channel_inbound,t_click_recorder,t_customer_acceptance_form,t_customer_auction_reason,t_customer_change_service,t_customer_his,t_customer_opensea_his,t_customer_recovery,t_customer_source,t_customer_submitdata_log,t_customer_tracking_his,t_customer_tracking_log,t_customer_transfer_record,t_expectprice_his,t_goodness_customer_log,t_interface_log --skip-tz-utc -o /database/deploy/backup/crmtrack_180329
+
+
+./bin/loader -h 10.100.16.51 -P 4000 -u tidb -p tidb -t 16 -d /database/deploy/backup/crmtrack_180329
+
