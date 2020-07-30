@@ -1,0 +1,841 @@
+consul+MHA(搭建忽略) 实现MySQL高可用
+
+
+
+MHA搭建：
+
+#确认slave授权如下
+
+GRANT REPLICATION SLAVE,replication client,super ON *.* TO 'repl'@'188.188.23.%' identified by 'repl@che';
+
+
+
+188.188.23.220:m1+consul client
+
+188.188.23.221:s1+consul client
+
+188.188.23.222:s2+consul client
+
+188.188.23.223:consul server
+
+
+
+
+
+23.223:
+
+mkdir /etc/consul.d/ -p && mkdir /database/consul/shell -p
+
+unzip consul_1.4.3_linux_amd64.zip 
+
+
+
+vi /etc/consul.d/server.json 
+
+
+
+{
+
+  "data_dir": "/database/consul",
+
+  "datacenter": "dc_jiale01",
+
+  "log_level": "debug",
+
+  "server": true,
+
+  "bootstrap_expect": 1,
+
+  "bind_addr": "188.188.23.223",
+
+  "client_addr": "188.188.23.223",
+
+  "ui":true
+
+}
+
+
+
+
+
+#23.220-222 consul-client基础配置
+
+
+
+mkdir /etc/consul.d/ -p && mkdir /database/consul/shell -p
+
+unzip consul_1.4.3_linux_amd64.zip 
+
+vi /etc/consul.d/client.json
+
+
+
+{
+
+  "data_dir": "/database/consul",
+
+  "datacenter": "dc_jiale01",   #需明确数据中心名称，防止冲突
+
+  "enable_script_checks": true,
+
+  "bind_addr": "188.188.23.220",
+
+  "retry_join": ["188.188.23.223"],
+
+  "retry_interval": "30s",
+
+  "rejoin_after_leave": true,
+
+  "start_join": ["188.188.23.223"]
+
+}
+
+
+
+
+
+#如下报错原因即因为之前测试存在"dc1"，导致注册失败
+
+2019/03/20 10:27:35 [ERR] memberlist: Failed push/pull merge: Member 'dbserver220' part of wrong datacenter 'dc1' from=188.188.23.220:52193
+
+2019/03/20 10:27:35 [DEBUG] memberlist: Stream connection from=188.188.23.220:52194
+
+2019/03/20 10:27:35 [ERR] memberlist: Failed push/pull merge: Member 'dbserver220' part of wrong datacenter 'dc1' from=188.188.23.220:52194
+
+2019/03/20 10:27:39 [DEBUG] consul: Skipping self join check for "dbserver223" since the cluster is too small
+
+
+
+
+
+
+
+
+
+#23.223 consul-server 启动server,查看日志
+
+nohup /usr/local/consul agent -config-dir=/etc/consul.d > /database/consul/consul.log &
+
+
+
+
+
+#23.220-222 consul-client 启动client
+
+nohup /usr/local/consul agent -config-dir=/etc/consul.d > /database/consul/consul.log &
+
+
+
+
+
+#每个节点均可查看节点成员信息：
+
+[root@dbserver220 local]# ./consul members --http-addr=188.188.23.220:8500
+
+Error retrieving members: Get http://188.188.23.220:8500/v1/agent/members?segment=_all: dial tcp 188.188.23.220:8500: connect: connection refused
+
+
+
+[root@dbserver220 local]# ./consul members --http-addr=188.188.23.223:8500
+
+Node         Address              Status  Type    Build  Protocol  DC          Segment
+
+dbserver223  188.188.23.223:8301  alive   server  1.4.3  2         dc_jiale01  <all>
+
+dbserver220  188.188.23.220:8301  alive   client  1.4.3  2         dc_jiale01  <default>
+
+dbserver221  188.188.23.221:8301  alive   client  1.4.3  2         dc_jiale01  <default>
+
+dbserver222  188.188.23.222:8301  alive   client  1.4.3  2         dc_jiale01  <default>
+
+
+
+
+
+
+
+
+
+#23.220,221,223 均配置如下
+
+#consul1.0+版本 json配置文件需调整（添加）args，不能直接➕端口
+
+[root@dbserver220 consul.d]# cat r-3307-mysql.json
+
+{
+
+        "services": [{
+
+                        "name": "r-3307-mysql",
+
+                        "tags": [
+
+                                "slave-mysql-3307"
+
+                        ],
+
+                        "address": "188.188.23.220",
+
+                        "port": 3307,
+
+                        "checks": [{
+
+                                        "args": [
+
+                                                "/database/consul/shell/check_mysql_slave.sh",
+
+                                                "3307"
+
+                                        ],
+
+                                        "interval": "15s"
+
+                                }
+
+                        ]
+
+                }
+
+        ]
+
+}
+
+
+
+
+
+
+
+[root@dbserver220 consul.d]# cat w-3307-mysql.json 
+
+{
+
+        "services": [{
+
+                        "name": "w-3307-mysql",
+
+                        "tags": [
+
+                                "master-mysql-3307"
+
+                        ],
+
+                        "address": "188.188.23.220",
+
+                        "port": 3307,
+
+                        "checks": [{
+
+                                        "args": [
+
+                                                "/database/consul/shell/check_mysql_master.sh",
+
+                                                "3307"
+
+                                        ],
+
+                                        "interval": "15s"
+
+                                }
+
+                        ]
+
+                }
+
+        ]
+
+}
+
+
+
+
+
+
+
+
+
+
+
+#mkdir /database/consul/shell -p 
+
+[root@dbserver220 shell]# pwd
+
+/database/consul/shell
+
+[root@dbserver220 shell]# ll
+
+total 8
+
+-rwxr-xr-x 1 root root  775 Mar 20 14:44 check_mysql_master.sh
+
+-rwxr-xr-x 1 root root 3026 Mar 20 14:52 check_mysql_slave.sh
+
+[root@dbserver220 shell]# cat check_mysql_master.sh 
+
+#!/bin/bash
+
+port=$1
+
+user="root"
+
+passwod="mychebao"
+
+
+
+comm="mysql -u$user -h 127.0.0.1 -P $port -p$passwod"
+
+slave_info=`$comm -e "show slave status" |wc -l`
+
+value=`$comm -Nse "select 1"`
+
+
+
+# 判断是不是从库
+
+if [ $slave_info -ne 0 ]
+
+then
+
+   echo "MySQL $port  Instance is Slave........"
+
+   $comm -e "show slave status\G" | egrep -w "Master_Host|Master_User|Master_Port|Master_Log_File|Read_Master_Log_Pos|Relay_Log_File|Relay_Log_Pos|Relay_Master_Log_File|Slave_IO_Running|Slave_SQL_Running|Exec_Master_Log_Pos|Relay_Log_Space|Seconds_Behind_Master"
+
+   exit 2
+
+fi
+
+
+
+
+
+# 判断mysql是否存活
+
+if [ -z $value ]
+
+then
+
+   exit 2
+
+fi
+
+
+
+echo "MySQL $port Instance is Master........"
+
+$comm -e "select * from information_schema.PROCESSLIST where user='repl' and COMMAND like '%Dump%'"
+
+
+
+
+
+
+
+[root@dbserver220 shell]# cat check_mysql_slave.sh 
+
+#!/bin/bash
+
+port=$1
+
+user="root"
+
+passwod="mychebao"
+
+repl_check_user="repl"
+
+repl_check_pwd="repl@che"
+
+
+
+master_comm="mysql -u$user -h 127.0.0.1 -P $port -p$passwod"
+
+slave_comm="mysql -u$repl_check_user -P $port -p$repl_check_pwd"
+
+
+
+# 判断mysql是否存活
+
+value=`$master_comm -Nse "select 1"`
+
+if [ -z $value ]
+
+then
+
+   echo "MySQL Server is Down....."
+
+   exit 2
+
+fi
+
+
+
+get_slave_count=0
+
+is_slave_role=0
+
+slave_mode_repl_delay=0
+
+master_mode_repl_delay=0
+
+master_mode_repl_dead=0
+
+slave_mode_repl_status=0
+
+max_delay=120
+
+
+
+get_slave_hosts=`$master_comm -Nse "select substring_index(HOST,':',1) from information_schema.PROCESSLIST where user='repl' and COMMAND like '%Binlog Dump%';" `
+
+get_slave_count=`$master_comm -Nse "select count(1) from information_schema.PROCESSLIST where user='repl' and COMMAND like '%Binlog Dump%';" `
+
+is_slave_role=`$master_comm -e "show slave status\G"|grep -Ewc "Slave_SQL_Running|Slave_IO_Running"`
+
+
+
+
+
+### 单点模式(如果 get_slave_count=0 and is_slave_role=0)
+
+function single_mode
+
+{
+
+if [ $get_slave_count -eq 0 -a $is_slave_role -eq 0 ]
+
+then
+
+    echo "MySQL $port Instance is Single Master........"
+
+    exit 0 
+
+fi
+
+}
+
+
+
+### 从节点模式(如果 get_slave_count=0 and is_slave_role=2 ) 
+
+function slave_mode
+
+{
+
+#如果是从节点,必须满足不延迟,
+
+if [  $is_slave_role -ge 2 ]
+
+then
+
+        echo "MySQL $port Instance is Slave........"
+
+        $master_comm -e "show slave status\G" | egrep -w "Master_Host|Master_User|Master_Port|Master_Log_File|Read_Master_Log_Pos|Relay_Log_File|Relay_Log_Pos|Relay_Master_Log_File|Slave_IO_Running|Slave_SQL_Running|Exec_Master_Log_Pos|Relay_Log_Space|Seconds_Behind_Master"
+
+        slave_mode_repl_delay=`$master_comm -e "show slave status\G" | grep -w "Seconds_Behind_Master" | awk '{print $NF}'`
+
+        slave_mode_repl_status=`$master_comm -e "show slave status\G"|grep -Ec "Slave_IO_Running: Yes|Slave_SQL_Running: Yes"`
+
+if [ X"$slave_mode_repl_delay" == X"NULL" ]
+
+then
+
+        slave_mode_repl_delay=99999
+
+fi
+
+        if [ $slave_mode_repl_delay != "NULL" -a $slave_mode_repl_delay -lt $max_delay -a $slave_mode_repl_status -ge 2 ] 
+
+        then
+
+             exit 0
+
+        fi
+
+fi
+
+} 
+
+
+
+function master_mode
+
+{
+
+###如果是主节点，必须满足从节点为延迟或复制错误。才可读
+
+if [ $get_slave_count -gt 0 -a $is_slave_role -eq  0 ]
+
+then
+
+    echo "MySQL $port Instance is Master........"
+
+    $master_comm -e "select * from information_schema.PROCESSLIST where user='repl' and COMMAND like '%Dump%'"
+
+    for my_slave in $get_slave_hosts
+
+do 
+
+master_mode_repl_delay=`$slave_comm -h $my_slave -e "show slave status\G" | grep -w "Seconds_Behind_Master" | awk '{print $NF}' `
+
+master_mode_repl_thread=`$slave_comm -h $my_slave -e "show slave status\G"|grep -Ec "Slave_IO_Running: Yes|Slave_SQL_Running: Yes"`
+
+if [ X"$master_mode_repl_delay" == X"NULL" ]
+
+then
+
+     master_mode_repl_delay=99999
+
+fi
+
+
+
+if [ $master_mode_repl_delay -lt $max_delay -a $master_mode_repl_thread -ge 2 ]
+
+then
+
+    exit 2
+
+fi
+
+done 
+
+exit 0
+
+fi
+
+} 
+
+
+
+single_mode
+
+slave_mode
+
+master_mode
+
+exit 2
+
+
+
+
+
+
+
+
+
+
+
+
+
+#188.188.23.223 consul-server:
+
+#测试读
+
+[root@dbserver223 local]#  dig @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 51385
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 2
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;r-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.221
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.222
+
+
+
+;; ADDITIONAL SECTION:
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 13:32:11 2019
+
+;; MSG SIZE  rcvd: 149
+
+
+
+
+
+
+
+[root@dbserver223 local]# dig @188.188.23.223 -p 8600 w-3307-mysql.service.consul
+
+
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 w-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 11910
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;w-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+w-3307-mysql.service.consul. 0  IN      A       188.188.23.220
+
+
+
+;; ADDITIONAL SECTION:
+
+w-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 14:12:08 2019
+
+;; MSG SIZE  rcvd: 97
+
+
+
+
+
+
+
+#同时停掉两台从服务（23.221，222）后，查看发现读写均在主库了。
+
+[root@dbserver223 local]# dig @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 51478
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;r-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.220
+
+
+
+;; ADDITIONAL SECTION:
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 14:50:32 2019
+
+;; MSG SIZE  rcvd: 97
+
+
+
+[root@dbserver223 local]# dig @188.188.23.223 -p 8600 w-3307-mysql.service.consul
+
+
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 w-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 35620
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;w-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+w-3307-mysql.service.consul. 0  IN      A       188.188.23.220
+
+
+
+;; ADDITIONAL SECTION:
+
+w-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 14:52:12 2019
+
+;; MSG SIZE  rcvd: 97
+
+
+
+
+
+
+
+#逐步恢复23.221和23.222 slave state后，观察读请求逐渐恢复分布在两台服务器。
+
+[root@dbserver223 local]# dig @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 26169
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;r-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.221
+
+
+
+;; ADDITIONAL SECTION:
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 14:58:34 2019
+
+;; MSG SIZE  rcvd: 97
+
+
+
+[root@dbserver223 local]# dig @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+
+
+; <<>> DiG 9.8.2rc1-RedHat-9.8.2-0.68.rc1.el6_10.1 <<>> @188.188.23.223 -p 8600 r-3307-mysql.service.consul
+
+; (1 server found)
+
+;; global options: +cmd
+
+;; Got answer:
+
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 42414
+
+;; flags: qr aa rd; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 2
+
+;; WARNING: recursion requested but not available
+
+
+
+;; QUESTION SECTION:
+
+;r-3307-mysql.service.consul.   IN      A
+
+
+
+;; ANSWER SECTION:
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.221
+
+r-3307-mysql.service.consul. 0  IN      A       188.188.23.222
+
+
+
+;; ADDITIONAL SECTION:
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+r-3307-mysql.service.consul. 0  IN      TXT     "consul-network-segment="
+
+
+
+;; Query time: 0 msec
+
+;; SERVER: 188.188.23.223#8600(188.188.23.223)
+
+;; WHEN: Thu Mar 21 14:59:17 2019
+
+;; MSG SIZE  rcvd: 149
+
+
