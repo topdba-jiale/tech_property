@@ -1,0 +1,485 @@
+clickhouse 实战
+
+-- install pre-compiled tgz Archives
+-- 参考官网手册 https://clickhouse.tech/docs/en/getting-started/install/
+
+curl -O https://repo.clickhouse.tech/tgz/stable/clickhouse-client-20.4.4.18.tgz
+curl -O https://repo.clickhouse.tech/tgz/stable/clickhouse-common-static-20.4.4.18.tgz
+curl -O https://repo.clickhouse.tech/tgz/stable/clickhouse-common-static-dbg-20.4.4.18.tgz
+curl -O https://repo.clickhouse.tech/tgz/stable/clickhouse-server-20.4.4.18.tgz
+
+
+[root@192 local]# tar xzf clickhouse-common-static-20.4.4.18.tgz
+[root@192 local]# sh clickhouse-common-static-20.4.4.18/install/doinst.sh 
+[root@192 local]# tar xzf clickhouse-common-static-dbg-20.4.4.18.tgz
+[root@192 local]# sh clickhouse-common-static-dbg-20.4.4.18/install/doinst.sh
+[root@192 local]# tar xzf clickhouse-server-20.4.4.18.tgz
+[root@192 local]# sh clickhouse-server-20.4.4.18/install/doinst.sh 
+Created symlink from /etc/systemd/system/multi-user.target.wants/clickhouse-server.service to /etc/systemd/system/clickhouse-server.service.
+Path to data directory in /etc/clickhouse-server/config.xml: /var/lib/clickhouse/
+[root@192 local]# tar xzf clickhouse-client-20.4.4.18.tgz
+[root@192 local]# sh clickhouse-client-20.4.4.18/install/doinst.sh 
+
+[root@192 local]# /etc/init.d/clickhouse-server start
+Start clickhouse-server service: Path to data directory in /etc/clickhouse-server/config.xml: /var/lib/clickhouse/
+DONE
+
+[root@192 local]# clickhouse-client 
+ClickHouse client version 20.4.4.18 (official build).
+Connecting to localhost:9000 as user default.
+Connected to ClickHouse server version 20.4.4 revision 54434.
+
+192.168.2.220 :) 
+192.168.2.220 :) 
+192.168.2.220 :) show databases;
+
+SHOW DATABASES
+
+┌─name───────────────────────────┐
+│ _temporary_and_external_tables │
+│ default                        │
+│ system                         │
+└────────────────────────────────┘
+
+3 rows in set. Elapsed: 0.003 sec. 
+
+192.168.2.220 :) 
+
+
+192.168.2.220 :) create table test1(id String,url String,code String, eventtime Date) engine=MergeTree() ORDER BY (id,eventtime) ;
+
+CREATE TABLE test1
+(
+    `id` String, 
+    `url` String, 
+    `code` String, 
+    `eventtime` Date
+)
+ENGINE = MergeTree()
+ORDER BY (id, eventtime)
+
+Ok.
+
+0 rows in set. Elapsed: 0.281 sec. 
+
+192.168.2.220 :) show tables;
+
+SHOW TABLES
+
+┌─name──┐
+│ test1 │
+└───────┘
+
+1 rows in set. Elapsed: 0.004 sec.
+
+
+192.168.2.220 :) INSERT INTO test1 values ('1','www.baidu.com','00001','2020-06-30');
+
+INSERT INTO test1 VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.006 sec. 
+
+192.168.2.220 :) INSERT INTO test1 values ('2','www.google.com','00002','2020-06-30');
+
+INSERT INTO test1 VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) INSERT INTO test1 values ('2','www.qunje.com','00008','2020-06-30');
+
+INSERT INTO test1 VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) INSERT INTO test1 values ('3','www.zhihu.com','00200','2020-06-30');
+
+INSERT INTO test1 VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) INSERT INTO test1 values ('4','www.taobao.com','00200','2008-04-30');
+
+INSERT INTO test1 VALUES
+
+192.168.2.220 :) select * from test1;
+
+SELECT *
+FROM test1
+
+┌─id─┬─url───────────┬─code──┬──eventtime─┐
+│ 3  │ www.zhihu.com │ 00200 │ 2020-06-30 │
+└────┴───────────────┴───────┴────────────┘
+┌─id─┬─url───────────┬─code──┬──eventtime─┐
+│ 1  │ www.baidu.com │ 00001 │ 2020-06-30 │
+└────┴───────────────┴───────┴────────────┘
+┌─id─┬─url───────────┬─code──┬──eventtime─┐
+│ 2  │ www.qunje.com │ 00008 │ 2020-06-30 │
+└────┴───────────────┴───────┴────────────┘
+┌─id─┬─url────────────┬─code──┬──eventtime─┐
+│ 2  │ www.google.com │ 00002 │ 2020-06-30 │
+└────┴────────────────┴───────┴────────────┘
+┌─id─┬─url────────────┬─code──┬──eventtime─┐
+│ 4  │ www.taobao.com │ 00200 │ 2008-04-30 │
+└────┴────────────────┴───────┴────────────┘
+
+5 rows in set. Elapsed: 0.005 sec. 
+
+192.168.2.220 :) create table t_replace(id String,code String,create_time Datetime) engine=ReplacingMergeTree() partition by toYYYYMM(create_time) order by (id,code) primary key id;
+
+CREATE TABLE t_replace
+(
+    `id` String, 
+    `code` String, 
+    `create_time` Datetime
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY toYYYYMM(create_time)
+PRIMARY KEY id
+ORDER BY (id, code)
+
+Ok.
+
+0 rows in set. Elapsed: 0.042 sec. 
+
+192.168.2.220 :) show tables;
+
+SHOW TABLES
+
+┌─name──────┐
+│ t_replace │
+│ test1     │
+└───────────┘
+
+2 rows in set. Elapsed: 0.004 sec. 
+
+
+192.168.2.220 :) insert into t_replace values ('A001','C1','2018-04-20 10:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.008 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C1','2018-04-20 10:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.001 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A002','C2','2019-05-20 10:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.001 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C3','2019-05-20 12:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C3','2019-05-20 12:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C4','2019-08-12 03:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.004 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C5','2019-09-28 10:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.005 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C6','2020-08-09 13:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+insert into t_replace values ('A001','C7','2020-06-26 15:10:00') ;
+Ok.
+
+1 rows in set. Elapsed: 0.006 sec. 
+
+192.168.2.220 :) insert into t_replace values ('A001','C7','2020-06-26 15:10:00') ;
+
+INSERT INTO t_replace VALUES
+
+Ok.
+
+1 rows in set. Elapsed: 0.005 sec. 
+
+
+192.168.2.220 :) select * from t_replace;
+
+SELECT *
+FROM t_replace
+
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C7   │ 2020-06-26 15:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C1   │ 2018-04-20 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C3   │ 2019-05-20 12:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C6   │ 2020-08-09 13:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C3   │ 2019-05-20 12:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C5   │ 2019-09-28 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C1   │ 2018-04-20 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A002 │ C2   │ 2019-05-20 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C4   │ 2019-08-12 03:10:00 │
+└──────┴──────┴─────────────────────┘
+
+9 rows in set. Elapsed: 0.006 sec. 
+
+192.168.2.220 :) optimize table t_replace final;
+
+OPTIMIZE TABLE t_replace FINAL
+
+Ok.
+
+0 rows in set. Elapsed: 0.033 sec. 
+
+192.168.2.220 :) select * from t_replace;
+
+SELECT *
+FROM t_replace
+
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C6   │ 2020-08-09 13:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C7   │ 2020-06-26 15:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C4   │ 2019-08-12 03:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C5   │ 2019-09-28 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C3   │ 2019-05-20 12:10:00 │
+│ A002 │ C2   │ 2019-05-20 10:10:00 │
+└──────┴──────┴─────────────────────┘
+┌─id───┬─code─┬─────────create_time─┐
+│ A001 │ C1   │ 2018-04-20 10:10:00 │
+└──────┴──────┴─────────────────────┘
+
+7 rows in set. Elapsed: 0.005 sec. 
+
+
+
+192.168.2.220 :) CREATE TABLE jiale.sys_trace_log(rec_id UInt32,type UInt8,http_method String,class_name String,method_name String,thread_name String,in_params String,out_params String,remark String,add_time Datetime) ENGINE = MySQL('192.168.2.220:3306','apollo','sys_trace_log','apollo','apollo@qunje') ;
+
+CREATE TABLE jiale.sys_trace_log
+(
+    `rec_id` UInt32, 
+    `type` UInt8, 
+    `http_method` String, 
+    `class_name` String, 
+    `method_name` String, 
+    `thread_name` String, 
+    `in_params` String, 
+    `out_params` String, 
+    `remark` String, 
+    `add_time` Datetime
+)
+ENGINE = MySQL('192.168.2.220:3306', 'apollo', 'sys_trace_log', 'apollo', 'apollo@qunje')
+
+Ok.
+
+0 rows in set. Elapsed: 0.150 sec. 
+
+192.168.2.220 :) 
+192.168.2.220 :) 
+192.168.2.220 :) 
+192.168.2.220 :) select count(*) from sys_trace_log;
+
+SELECT count(*)
+FROM sys_trace_log
+
+┌──count()─┐
+│ 49750000 │
+└──────────┘
+
+1 rows in set. Elapsed: 10.702 sec. Processed 49.75 million rows, 49.75 MB (4.65 million rows/s., 4.65 MB/s.) 
+
+
+
+192.168.2.220 :) CREATE TABLE jiale.sys_trace_log_2(`rec_id` UInt32, `type` UInt8, `http_method` String, `class_name` String, `method_name` String, `thread_name` String, `in_params` String, `out_params` String, `remark` Nullable(String), `add_time` Datetime)ENGINE = MergeTree() PARTITION BY toYYYYMM(add_time)PRIMARY KEY rec_id ORDER BY (rec_id);
+
+CREATE TABLE jiale.sys_trace_log_2
+(
+    `rec_id` UInt32, 
+    `type` UInt8, 
+    `http_method` String, 
+    `class_name` String, 
+    `method_name` String, 
+    `thread_name` String, 
+    `in_params` String, 
+    `out_params` String, 
+    `remark` Nullable(String), 
+    `add_time` (Datetime)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(add_time)
+PRIMARY KEY rec_id
+ORDER BY rec_id
+
+Ok.
+
+0 rows in set. Elapsed: 0.069 sec. 
+
+
+
+
+
+
+-- 如何设置用户可远程连接
+-- 需修改/etc/clickhouse-server/config.xml  配置文件 
+vi /etc/clickhouse-server/config.xml 
+
+<listen_host>::</listen_host> -- 允许任意机器
+
+
+-- 修改 用户文件添加用户和相关权限 
+--  vi /etc/clickhouse-server/users.xml -- users模块添加
+
+        <apollo>
+           <password>123</password>
+           <networks incl="networks" replace="replace">
+               <ip>::/0</ip>
+           </networks>
+           <profile>default</profile>
+           <quota>default</quota>
+           <allow_databases>
+             <database>jiale</database>
+           </allow_databases>
+        </apollo>
+
+
+-- 重启服务
+[root@192 clickhouse-server]# /etc/init.d/clickhouse-server restart
+Stop clickhouse-server service: DONE
+Start clickhouse-server service: Path to data directory in /etc/clickhouse-server/config.xml: /var/lib/clickhouse/
+DONE
+
+
+
+
+-- 测试 192.168.2.222 远程连接。
+[root@qj-mysql-node-222 local]# clickhouse-client -h 192.168.2.220 -u apollo --password 123 --port 9000
+ClickHouse client version 20.4.4.18 (official build).
+Connecting to 192.168.2.220:9000 as user apollo.
+Connected to ClickHouse server version 20.4.4 revision 54434.
+
+192.168.2.220 :) show databases;
+
+SHOW DATABASES
+
+┌─name──┐
+│ jiale │
+└───────┘
+
+1 rows in set. Elapsed: 0.005 sec. 
+
+192.168.2.220 :) 
+
+
+
+-- 对比两种数据库性能
+192.168.2.220 :) select count(*) from sys_trace_log_2 a where a.type = 2 and a.class_name like '%TokenController%' and a.add_time >= toDate('2020-07-03');
+
+SELECT count(*)
+FROM sys_trace_log_2 AS a
+WHERE (a.type = 2) AND (a.class_name LIKE '%TokenController%') AND (a.add_time >= toDate('2020-07-03'))
+
+┌──count()─┐
+│ 12432074 │
+└──────────┘
+
+1 rows in set. Elapsed: 0.559 sec. Processed 49.75 million rows, 3.08 GB (88.93 million rows/s., 5.51 GB/s.) 
+
+-- 等待20分钟依然无结果。。。。被迫终止
+192.168.2.220 :) select count(*) from sys_trace_log a where a.type = 2 and a.class_name like '%TokenController%' and a.add_time >= toDate('2020-07-03');
+
+SELECT count(*)
+FROM sys_trace_log AS a
+WHERE (a.type = 2) AND (a.class_name LIKE '%TokenController%') AND (a.add_time >= toDate('2020-07-03'))
+
+↓ Progress: 196.61 thousand rows, 12.19 MB (1.44 thousand rows/s., 89.41 KB/s.) 
+← Progress: 327.68 thousand rows, 20.32 MB (1.16 thousand rows/s., 71.66 KB/s.) 
+↙ Progress: 1.31 million rows, 81.26 MB (2.14 thousand rows/s., 132.69 KB/s.) 
+→ Progress: 3.74 million rows, 231.60 MB (2.81 thousand rows/s., 174.06 KB/s.) 
+Cancelling query.
+^C
+
+
+
+
+192.168.2.220 :) use jiale
+
+USE jiale
+
+Ok.
+
+0 rows in set. Elapsed: 0.002 sec. 
+
+192.168.2.220 :) select count(*) from sys_trace_log_2 a where a.type = 2 and a.class_name = 'com.qunje.apollo.controller.auth.TokenController' and a.method_name = 'getToken' and a.add_time >= toDate('2020-07-03');
+
+SELECT count(*)
+FROM sys_trace_log_2 AS a
+WHERE (a.type = 2) AND (a.class_name = 'com.qunje.apollo.controller.auth.TokenController') AND (a.method_name = 'getToken') AND (a.add_time >= toDate('2020-07-03'))
+
+┌──count()─┐
+│ 12432074 │
+└──────────┘
+
+1 rows in set. Elapsed: 0.303 sec. Processed 49.75 million rows, 3.93 GB (164.44 million rows/s., 12.99 GB/s.) 
+
+
+
+
+
+
+
+
+
