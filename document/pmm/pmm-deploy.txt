@@ -1,0 +1,218 @@
+pmm监控MySQL多实例
+
+OS：CentOS7
+pmm-server:192.168.2.221   version:2.4.0
+pmm-client:192.168.2.220
+
+
+
+
+-- 服务端需开启防火墙(192.168.2.221)。客户端连接服务端时会“自动注册”相关端口服务。
+[root@192 srv]# firewall-cmd --state
+not running
+[root@192 ~]# systemctl start firewalld.service
+
+客户端需关闭防火墙
+[root@192 ~]# systemctl stop firewalld.service
+
+
+-- 设置服务端，客户端地址(192.168.2.221/220)
+[root@localhost ~]# hostnamectl --static
+localhost.localdomain
+[root@localhost ~]# hostnamectl set-hostname 192.168.2.221
+
+
+[root@localhost ~]# hostnamectl --static
+localhost.localdomain
+[root@localhost ~]# hostnamectl set-hostname 192.168.2.220
+
+
+
+-- 服务端 （192.168.2.221 ）安装并启动docker服务
+yum -y remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine
+
+yum-config-manager --add-repo http://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+
+yum -y install docker-ce
+
+systemctl start docker
+
+-- 拉取制定版本pmm-server,创建并运行服务。
+[root@192 ~]# docker pull percona/pmm-server:2.4.0
+2.4.0: Pulling from percona/pmm-server
+Digest: sha256:50d445edd7da598b7f894285637ab7991f29832c67bc19b6848df1c5a9467aa5
+Status: Image is up to date for percona/pmm-server:2.4.0
+docker.io/percona/pmm-server:2.4.0
+[root@192 ~]# docker create -v /src --name pmm-data percona/pmm-server:2.4.0 /bin/true
+1a67437f73d4a3ed1f7320e0a2fdfc308a0af5dd645e0f784bbee7ef8a45e750
+[root@192 ~]# docker run -d -p 80:80 -p 443:443 --volumes-from pmm-data --name pmm-server --restart always percona/pmm-server:2.4.0
+b44bcc64e63e44efb60f9994177ac4ec5150781fe4aed8913120429f0417fb1d
+[root@192 ~]#  docker ps -a
+CONTAINER ID        IMAGE                                                                      COMMAND                  CREATED             STATUS                            PORTS                                      NAMES
+b44bcc64e63e        percona/pmm-server:2.4.0                                                   "/opt/entrypoint.sh"     10 seconds ago      Up 5 seconds (health: starting)   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp   pmm-server
+1a67437f73d4        percona/pmm-server:2.4.0                                                   "/bin/true"              17 seconds ago      Created                                                                      pmm-data
+4a4acda7117c        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.file:v5.2.20040201          "java -jar -Xms800m …"   2 months ago        Up 4 days                                                                    file
+5aa838c13a0b        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.zuul                        "java -jar -Xms800m …"   2 months ago        Up 4 days                                                                    zuul
+19de2a1da0ab        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.connector:v5.2.20040201     "java -jar -Xms1500m…"   2 months ago        Up 4 days                                                                    connector
+ef875de6133f        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.web:v5.2.20040302_old_app   "java -jar -Xms800m …"   2 months ago        Up 4 days                                                                    web
+09e659e0632e        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.message:v5.2.20040201       "java -jar -Xms800m …"   2 months ago        Up 4 days                                                                    message
+02f655a93a1d        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.solr:v5.5                   "docker-entrypoint.s…"   2 months ago        Up 4 days                         127.0.0.1:1212->8983/tcp                   solr
+26de7cea29cf        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.nginx:12.13                 "nginx -g 'daemon of…"   2 months ago        Up 4 days                                                                    nginx
+7f7e2f934902        webcenter/activemq                                                         "/app/run.sh"            2 months ago        Up 4 days                                                                    mq
+f686efa4772f        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.redis                       "docker-entrypoint.s…"   2 months ago        Up 4 days                                                                    redis
+c295a6ed7792        registry.cn-hangzhou.aliyuncs.com/qunje/p5.pro.eureka:v5.1.0.191227        "java -jar -Xms800m …"   2 months ago        Up 4 days (healthy)                                                          eureka
+
+
+
+
+
+-- 192.168.2.220 client 
+-- grant privileges
+grant all on *.* to pmm@192.168.2.220 identified by 'pmm';
+
+
+-- wget -c https://www.percona.com/downloads/pmm2/2.4.0/binary/redhat/7/x86_64/pmm2-client-2.4.0-6.el7.x86_64.rpm
+
+rpm -ivh pmm2-client-2.4.0-6.el7.x86_64.rpm
+
+-- 此步骤至关重要，由于多网卡，需要指定IP地址。
+[root@192 ~]# pmm-admin config --server-insecure-tls --server-url=https://admin:admin@192.168.2.221:443 192.168.2.220 generic 192.168.2.220_pmm_client               
+Checking local pmm-agent status...
+pmm-agent is running.
+Registering pmm-agent on PMM Server...
+Registered.
+Configuration file /usr/local/percona/pmm2/config/pmm-agent.yaml updated.
+Reloading pmm-agent configuration...
+Configuration reloaded.
+Checking local pmm-agent status...
+pmm-agent is running.
+
+
+
+-- 客户端添加相关agent服务
+[root@192 ~]# pmm-admin add mysql --query-source=slowlog --username=pmm --password=pmm --service-name=192.168.2.220:3306_5.0 --host=192.168.2.220 --port=3306
+MySQL Service added.
+Service ID  : /service_id/c67ea6d9-15bb-4eb5-b841-5c6afc7f7dcd
+Service name: 192.168.2.220:3306_5.0
+
+Table statistics collection enabled (the limit is 1000, the actual table count is 564).
+
+[root@192 ~]# pmm-admin add mysql --query-source=slowlog --username=pmm --password=pmm --service-name=192.168.2.220:3307_ai --host=192.168.2.220 --port=3307   
+MySQL Service added.
+Service ID  : /service_id/7110a3ea-e334-4c23-b85d-47eada54ba0d
+Service name: 192.168.2.220:3307_ai
+
+Table statistics collection enabled (the limit is 1000, the actual table count is 317).
+
+[root@192 ~]# pmm-admin add mysql --query-source=slowlog --username=pmm --password=pmm --service-name=192.168.2.220:3308_3.0 --host=192.168.2.220 --port=3308 
+MySQL Service added.
+Service ID  : /service_id/22b95f3b-e215-47fd-8a3c-807aace665cb
+Service name: 192.168.2.220:3308_3.0
+
+Table statistics collection enabled (the limit is 1000, the actual table count is 695).
+
+
+[root@192 ~]# pmm-admin add mysql --query-source=slowlog --username=pmm --password=pmm --service-name=192.168.2.220:3309_sealhome --host=192.168.2.220 --port=3309
+MySQL Service added.
+Service ID  : /service_id/5aed5022-d6d4-48b3-a215-08d85f7cf221
+Service name: 192.168.2.220:3309_sealhome
+
+Table statistics collection enabled (the limit is 1000, the actual table count is 360).
+
+
+
+
+[root@192 ~]# pmm-admin list
+Service type  Service name         Address and port  Service ID
+MySQL         192.168.2.220:3307_ai 192.168.2.220:3307 /service_id/7110a3ea-e334-4c23-b85d-47eada54ba0d
+MySQL         192.168.2.220:3306_5.0 192.168.2.220:3306 /service_id/c67ea6d9-15bb-4eb5-b841-5c6afc7f7dcd
+
+Agent type                  Status     Agent ID                                        Service ID
+pmm_agent                   Connected  /agent_id/a5d0fc92-af61-431c-bb3d-c0ad9e5609df  
+node_exporter               Running    /agent_id/1c5ad19b-49d3-4db8-89a0-a20d226dfcbe  
+mysqld_exporter             Running    /agent_id/d0b92def-c0b0-4d9e-a11e-65fc15ba62c8  /service_id/c67ea6d9-15bb-4eb5-b841-5c6afc7f7dcd
+mysqld_exporter             Running    /agent_id/d2030208-86ba-40ee-9651-a96a51d399ba  /service_id/7110a3ea-e334-4c23-b85d-47eada54ba0d
+mysql_slowlog_agent         Running    /agent_id/18602593-07e6-4919-88c8-f6e6e6fdf4b9  /service_id/7110a3ea-e334-4c23-b85d-47eada54ba0d
+mysql_slowlog_agent         Running    /agent_id/4feaf221-6eb2-49a5-85b7-6c0f412ff8b7  /service_id/c67ea6d9-15bb-4eb5-b841-5c6afc7f7dcd
+
+
+[root@192 ~]# pmm-admin status
+Agent ID: /agent_id/1fdcc5a0-6116-48b6-8b27-d3164a0b7c69
+Node ID : /node_id/550c157b-acbb-4d4c-b241-884287235c70
+
+PMM Server:
+        URL    : https://192.168.2.221:443/
+        Version: 2.4.0
+
+PMM-agent:
+        Connected : true
+        Time drift: -5.025306ms
+        Latency   : 869.425µs
+
+Agents:
+        /agent_id/144f5bdf-3b15-4047-9483-3fe21c48f8b2 mysqld_exporter Running
+        /agent_id/21ab4368-efea-43f6-86b3-1d786e457931 mysql_slowlog_agent 
+        /agent_id/44fa9708-8d4c-4185-a280-9250ea80606a mysqld_exporter Running
+        /agent_id/479fd88d-f0d6-49ac-9180-632537298d1e mysql_slowlog_agent 
+        /agent_id/5728862f-34f5-4bf9-bb58-e56e211eb9f1 mysqld_exporter Running
+        /agent_id/82f6a1b4-52db-4f25-a1bc-a36feb43ee8a mysql_slowlog_agent 
+        /agent_id/a81352c9-3a79-4baa-b5ce-48cb8716dac9 mysqld_exporter Running
+        /agent_id/c9bff96c-6c03-45a7-83ec-3c8f970755d6 mysql_slowlog_agent 
+        /agent_id/e024a9c2-bdce-4ec5-8eaf-bbbad8869a90 node_exporter Running
+
+
+
+
+-- 192.168.2.221 client 
+[root@192 opt]# rpm -ivh pmm2-client-2.4.0-6.el7.x86_64.rpm 
+
+[root@192 opt]# pmm-admin config --server-insecure-tls --server-url=https://admin:admin@192.168.2.221:443 192.168.2.221 generic 192.168.2.221_pmm_client 
+Checking local pmm-agent status...
+pmm-agent is running.
+Registering pmm-agent on PMM Server...
+Registered.
+Configuration file /usr/local/percona/pmm2/config/pmm-agent.yaml updated.
+Reloading pmm-agent configuration...
+Configuration reloaded.
+Checking local pmm-agent status...
+pmm-agent is running.
+
+[root@192 opt]# pmm-admin add mysql --query-source=slowlog --username=pmm --password=pmm --service-name=192.168.2.221:3307_5.0_base_test --host=192.168.2.221 --port=3307
+MySQL Service added.
+Service ID  : /service_id/b9fd845b-5e22-49be-9131-1a5963e10db8
+Service name: 192.168.2.221:3307_5.0_base_test
+
+Table statistics collection enabled (the limit is 1000, the actual table count is 379).
+
+
+
+-- 若删除某个服务可执行
+[root@192 ~]# pmm-admin remove mysql 192.168.2.220:3306_5.0
+Service removed.
+
+
+--------------------------------------------------------------------------------------------------------------
+
+-- 运行一段时间后发现系统报错，无法登陆服务器。排查原因需修改相关文件数限制。
+-- 修改用户进程可打开文件数限制
+-- 默认配置
+[root@192 opt]# ulimit -n
+1024
+
+-- 调大打开文件数的软限制和硬限制（设置大小 102400）
+vi /etc/security/limits.conf 
+*       soft    nofile  102400
+*       hard    nofile  102400
+*       soft    nproc  102400
+*       hard    nproc  102400
+
+-- 调用pam_limits.so模块来设置系统对用户可使用的各种资源数量的最大限制(包括用户可打开的最大文件数限制)
+echo "session required /lib/security/pam_limits.so" >> /etc/pam.d/login
+
+-- Linux系统最多允许同时打开(即包含所有用户打开文件数总和)的文件数，是Linux系统级硬限制，所有用户级的打开文件数限制都不应超过这个数值
+[root@192 log]# cat /proc/sys/fs/file-max
+3229865
+
+
+
+
