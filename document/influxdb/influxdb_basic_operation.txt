@@ -1,0 +1,466 @@
+-- 需求说明：
+dubbo 链路跟踪，熔断系统需监控捕捉每个应用接口耗时，tps 等信息。最终决议使用influxdb+grafana技术形式。
+-- 188.188.23.221
+https://www.aliyun.com/jiaocheng/topic_23928.html
+wget https://dl.influxdata.com/influxdb/releases/influxdb-1.0.0.x86_64.rpm  -- 有web管理界面 
+wget https://dl.influxdata.com/influxdb/releases/influxdb-1.6.0.x86_64.rpm  -- 无web管理界面
+
+mkdir -p /database/influxdb 
+useradd influxdb 
+chown -R influxdb.influxdb /database/influxdb/
+service influxdb start
+[root@DB221 ~]# influx -precision csf3339   
+Visit https://enterprise.influxdata.com to register for updates, InfluxDB server management, and monitoring.
+Connected to http://localhost:8086 version 1.0.0
+InfluxDB shell version: 1.0.0
+> 
+> CREATE USER "admin" WITH PASSWORD 'mychebao' WITH ALL PRIVILEGES;
+> create database jiale;
+> show databases
+name: databases
+---------------
+name
+_internal
+jiale
+
+
+[root@DB221 local]# influx -username admin  -port 8086 -host localhost -password ''
+password: 
+Visit https://enterprise.influxdata.com to register for updates, InfluxDB server management, and monitoring.
+Connected to http://localhost:8086 version 1.0.0
+InfluxDB shell version: 1.0.0
+> CREATE DATABASE "dubbo" WITH DURATION 100d REPLICATION 2 SHARD DURATION 30m NAME "dubbo-rp"
+> use jiale
+Using database jiale
+> INSERT cpu,host=serverA,region=us_west value=0.64
+> show series
+key
+cpu,host=serverA,region=us_west
+
+> select * from cpu
+name: cpu
+---------
+time                    host    region  value
+1532054147269615061     serverA us_west 0.64
+
+> 
+-- 可用过 http://188.188.23.221:8083/ 访问web管理页面
+-- InfluxDB 通过HTTP API操作数据库
+
+[root@DB221 influxdb]# curl -POST http://localhost:8086/query --data-urlencode "q=show databases"
+{"results":[{"series":[{"name":"databases","columns":["name"],"values":[["_internal"],["jiale"],["dubbo"]]}]}]}
+[root@DB221 influxdb]# curl -i -XPOST 'http://localhost:8086/write?db=jiale' --data-binary 'cpu,host=serverA,region=us-est value=0.88'
+HTTP/1.1 204 No Content
+Content-Type: application/json
+Request-Id: e760c90b-8be1-11e8-8023-000000000000
+X-Influxdb-Version: 1.0.0
+Date: Fri, 20 Jul 2018 05:58:20 GMT
+
+--插入多条数据
+[root@DB221 influxdb]# curl -i -XPOST 'http://localhost:8086/write?db=jiale' --data-binary 'cpu,host=serverB,region=china-north value=1.77
+> cpu,host=serverB,region=china-north value=1.23
+> cpu,host=serverC,region=japa-north value=2.44'
+HTTP/1.1 204 No Content
+Content-Type: application/json
+Request-Id: 1c9c496a-8be4-11e8-8025-000000000000
+X-Influxdb-Version: 1.0.0
+Date: Fri, 20 Jul 2018 06:14:08 GMT
+
+
+-- 查看数据保留策略
+> show retention policies on jiale
+name    duration        shardGroupDuration      replicaN        default
+autogen 0               168h0m0s                1               true
+
+
+-- 新建策略
+> CREATE RETENTION POLICY "jiale-re" ON "jiale" DURATION 60h REPLICATION 2 SHARD DURATION 30m
+>  show retention policies on jiale
+name            duration        shardGroupDuration      replicaN        default
+autogen         0               168h0m0s                1               true
+jiale-re        60h0m0s         30m0s                   2               false
+
+-- 修改/删除策略
+> alter retention policy "jiale-re" on jiale duration 600h 
+> 
+> drop retention policy "autogen" on jiale
+> 
+> 
+> show retention policies on jiale
+name            duration        shardGroupDuration      replicaN        default
+jiale-re        600h0m0s        24h0m0s                 2               false
+
+default ''
+
+
+
+-- 测试
+所属项目 接口方法 runtime qps 插入时间
+
+program method runtime qps insert_time
+
+crm object1 100 30 2018-01-01 01:00:00
+crm object2 120 30 2018-01-01 01:00:00
+crm object2 180 60 2018-01-01 01:05:00
+crm object2 100 50 2018-01-01 01:15:00
+crm object2 330 80 2018-01-01 01:16:00
+crm object2 230 45 2018-01-01 01:20:00
+crm object3 50 30 2018-01-01 01:16:00
+crm object3 100 100 2018-01-01 01:15:00
+crm object4 100 400 2018-01-01 01:16:00
+crm object4 80 200 2018-01-01 01:20:00
+crm object4 120 300 2018-01-01 03:00:00
+crm object4 100 280 2018-01-01 03:28:00
+crm object5 130 200 2018-01-01 03:35:00
+crm object5 330 280 2018-01-01 03:40:00
+crm object5 320 300 2018-01-01 03:45:00
+crm object5 180 200 2018-01-01 03:50:00
+crm object5 160 220 2018-01-01 03:55:00
+
+
+> drop database dubbo
+> 
+> 
+> create database dubbo
+> use dubbo
+Using database dubbo
+> insert follow,program=crm,method=object1,runtime=100 qps=300
+> insert follow,program=crm,method=object2,runtime=120 qps=300
+> insert follow,program=crm,method=object2,runtime=180 qps=600
+> insert follow,program=crm,method=object2,runtime=100 qps=500
+> insert follow,program=crm,method=object2,runtime=330 qps=800
+> insert follow,program=crm,method=object2,runtime=230 qps=450
+> insert follow,program=crm,method=object3,runtime=150 qps=300
+> insert follow,program=crm,method=object3,runtime=100 qps=100
+> insert follow,program=crm,method=object4,runtime=100 qps=400
+> insert follow,program=crm,method=object4,runtime=180 qps=200
+> insert follow,program=crm,method=object4,runtime=120 qps=300
+> insert follow,program=crm,method=object4,runtime=100 qps=280
+> insert follow,program=crm,method=object5,runtime=130 qps=200
+> insert follow,program=crm,method=object5,runtime=330 qps=280
+> insert follow,program=crm,method=object5,runtime=320 qps=300
+> insert follow,program=crm,method=object5,runtime=180 qps=200
+> insert follow,program=crm,method=object5,runtime=160 qps=220
+> insert follow,program=aucs,method=object1,runtime=100 qps=300
+> insert follow,program=aucs,method=object2,runtime=120 qps=230
+> insert follow,program=aucs,method=object2,runtime=180 qps=200
+> insert follow,program=aucs,method=object2,runtime=100 qps=500
+> insert follow,program=aucs,method=object2,runtime=330 qps=340
+> insert follow,program=aucs,method=object2,runtime=230 qps=450
+> insert follow,program=aucs,method=object3,runtime=150 qps=300
+> insert follow,program=aucs,method=object3,runtime=100 qps=130
+> insert follow,program=aucs,method=object4,runtime=100 qps=400
+> insert follow,program=aucs,method=object4,runtime=180 qps=200
+> insert follow,program=aucs,method=object4,runtime=120 qps=200
+> insert follow,program=aucs,method=object4,runtime=100 qps=280
+> insert follow,program=aucs,method=object5,runtime=130 qps=260
+> insert follow,program=aucs,method=object5,runtime=330 qps=280
+> insert follow,program=aucs,method=object5,runtime=320 qps=320
+> insert follow,program=aucs,method=object5,runtime=180 qps=210
+> insert follow,program=aucs,method=object5,runtime=160 qps=220
+
+
+
+> select * from follow where runtime>100    -- 不支持此中查询方式
+> select * from follow 
+name: follow
+------------
+time                    method  program qps     runtime
+1532163363293121841     object1 crm     300     100
+1532163363378774140     object2 crm     300     120
+1532163363408732170     object2 crm     600     180
+1532163363494771548     object2 crm     500     100
+1532163363525710248     object2 crm     800     330
+1532163363605849320     object2 crm     450     230
+1532163363688865269     object3 crm     300     150
+1532163363771750796     object3 crm     100     100
+1532163363847802249     object4 crm     400     100
+1532163363873745637     object4 crm     200     180
+1532163363881744453     object4 crm     300     120
+1532163364017864425     object4 crm     280     100
+1532163364026761351     object5 crm     200     130
+1532163364092808618     object5 crm     280     330
+1532163364164722375     object5 crm     300     320
+1532163364236909379     object5 crm     200     180
+1532163364905088435     object5 crm     220     160
+
+> show series from follow
+key
+follow,method=object1,program=crm,runtime=100
+follow,method=object2,program=crm,runtime=100
+follow,method=object2,program=crm,runtime=120
+follow,method=object2,program=crm,runtime=180
+follow,method=object2,program=crm,runtime=230
+follow,method=object2,program=crm,runtime=330
+follow,method=object3,program=crm,runtime=100
+follow,method=object3,program=crm,runtime=150
+follow,method=object4,program=crm,runtime=100
+follow,method=object4,program=crm,runtime=120
+follow,method=object4,program=crm,runtime=180
+follow,method=object5,program=crm,runtime=130
+follow,method=object5,program=crm,runtime=160
+follow,method=object5,program=crm,runtime=180
+follow,method=object5,program=crm,runtime=320
+follow,method=object5,program=crm,runtime=330
+
+> show measurements
+name: measurements
+------------------
+name
+follow
+
+> select * from follow order by time desc 
+name: follow
+------------
+time                    method  program qps     runtime
+1532163364905088435     object5 crm     220     160
+1532163364236909379     object5 crm     200     180
+1532163364164722375     object5 crm     300     320
+1532163364092808618     object5 crm     280     330
+1532163364026761351     object5 crm     200     130
+1532163364017864425     object4 crm     280     100
+1532163363881744453     object4 crm     300     120
+1532163363873745637     object4 crm     200     180
+1532163363847802249     object4 crm     400     100
+1532163363771750796     object3 crm     100     100
+1532163363688865269     object3 crm     300     150
+1532163363605849320     object2 crm     450     230
+1532163363525710248     object2 crm     800     330
+1532163363494771548     object2 crm     500     100
+1532163363408732170     object2 crm     600     180
+1532163363378774140     object2 crm     300     120
+1532163363293121841     object1 crm     300     100
+
+-- 通过http接口写数据
+[root@DB221 influxdb]# curl -i -XPOST 'http://127.0.0.1:8086/write?db=dubbo' --data-binary 'follow,program=crm,method=object5,runtime=180 qps=240'
+HTTP/1.1 204 No Content
+Content-Type: application/json
+Request-Id: 24a33d94-8cc5-11e8-80e1-000000000000
+X-Influxdb-Version: 1.0.0
+Date: Sat, 21 Jul 2018 09:04:58 GMT
+
+> select * from follow order by time 
+name: follow
+------------
+time                    method  program qps     runtime
+1532163363293121841     object1 crm     300     100
+1532163363378774140     object2 crm     300     120
+1532163363408732170     object2 crm     600     180
+1532163363494771548     object2 crm     500     100
+1532163363525710248     object2 crm     800     330
+1532163363605849320     object2 crm     450     230
+1532163363688865269     object3 crm     300     150
+1532163363771750796     object3 crm     100     100
+1532163363847802249     object4 crm     400     100
+1532163363873745637     object4 crm     200     180
+1532163363881744453     object4 crm     300     120
+1532163364017864425     object4 crm     280     100
+1532163364026761351     object5 crm     200     130
+1532163364092808618     object5 crm     280     330
+1532163364164722375     object5 crm     300     320
+1532163364236909379     object5 crm     200     180
+1532163364905088435     object5 crm     220     160
+1532163898592442743     object5 crm     240     180
+
+
+-- 通过http接口查询数据
+[root@DB221 ~]# curl -G 'http://localhost:8086/query?pretty=false' --data-urlencode "db=dubbo" --data-urlencode "q=select * from follow order by time desc"     
+{"results":[{"series":[{"name":"follow","columns":["time","method","program","qps","runtime"],"values":[["2018-07-21T09:33:33.680137692Z","object5","aucs",220,"160"],["2018-07-21T09:33:33.092789942Z","object5","aucs",210,"180"],["2018-07-21T09:33:33.080832489Z","object5","aucs",320,"320"],["2018-07-21T09:33:33.00582624Z","object5","aucs",280,"330"],["2018-07-21T09:33:32.975965066Z","object5","aucs",260,"130"],["2018-07-21T09:33:32.906742515Z","object4","aucs",280,"100"],["2018-07-21T09:33:32.899810181Z","object4","aucs",200,"120"],["2018-07-21T09:33:32.75981237Z","object4","aucs",200,"180"],["2018-07-21T09:33:32.751785486Z","object4","aucs",400,"100"],["2018-07-21T09:33:32.674667819Z","object3","aucs",130,"100"],["2018-07-21T09:33:32.665833026Z","object3","aucs",300,"150"],["2018-07-21T09:33:32.59455944Z","object2","aucs",450,"230"],["2018-07-21T09:33:32.586780394Z","object2","aucs",340,"330"],["2018-07-21T09:33:32.506801668Z","object2","aucs",500,"100"],["2018-07-21T09:33:32.419743572Z","object2","aucs",200,"180"],["2018-07-21T09:33:32.394894047Z","object2","aucs",230,"120"],["2018-07-21T09:33:32.296228254Z","object1","aucs",300,"100"],["2018-07-21T09:04:58.592442743Z","object5","crm",240,"180"],["2018-07-21T08:56:04.905088435Z","object5","crm",220,"160"],["2018-07-21T08:56:04.236909379Z","object5","crm",200,"180"],["2018-07-21T08:56:04.164722375Z","object5","crm",300,"320"],["2018-07-21T08:56:04.092808618Z","object5","crm",280,"330"],["2018-07-21T08:56:04.026761351Z","object5","crm",200,"130"],["2018-07-21T08:56:04.017864425Z","object4","crm",280,"100"],["2018-07-21T08:56:03.881744453Z","object4","crm",300,"120"],["2018-07-21T08:56:03.873745637Z","object4","crm",200,"180"],["2018-07-21T08:56:03.847802249Z","object4","crm",400,"100"],["2018-07-21T08:56:03.771750796Z","object3","crm",100,"100"],["2018-07-21T08:56:03.688865269Z","object3","crm",300,"150"],["2018-07-21T08:56:03.60584932Z","object2","crm",450,"230"],["2018-07-21T08:56:03.525710248Z","object2","crm",800,"330"],["2018-07-21T08:56:03.494771548Z","object2","crm",500,"100"],["2018-07-21T08:56:03.40873217Z","object2","crm",600,"180"],["2018-07-21T08:56:03.37877414Z","object2","crm",300,"120"],["2018-07-21T08:56:03.293121841Z","object1","crm",300,"100"]]}]}]}
+
+
+-- 数据保存策略相关
+> show retention policies on dubbo
+name    duration        shardGroupDuration      replicaN        default
+autogen 0               168h0m0s                1               true
+
+> CREATE RETENTION POLICY "rp_dubbo" ON "dubbo" DURATION 8w REPLICATION 1 default
+> 
+> show retention policies on dubbo
+name            duration        shardGroupDuration      replicaN        default
+autogen         0               168h0m0s                1               false
+rp_dubbo        1344h0m0s       24h0m0s                 1               true
+
+> alter retention policy "rp_dubbo" ON "dubbo" DURATION 12w REPLICATION 1 default
+> 
+> show retention policies on dubbo
+name            duration        shardGroupDuration      replicaN        default
+autogen         0               168h0m0s                1               false
+rp_dubbo        2016h0m0s       24h0m0s                 1               true
+
+
+
+-- 连续查询
+当数据超过保存策略里指定的时间之后就会被删除，但是这时候可能并不想数据被完全删掉，怎么办？
+influxdb提供了联系查询，可以做数据统计采样。
+
+> show continuous queries
+name: _internal
+---------------
+name    query
+
+
+name: jiale
+-----------
+name    query
+
+
+name: dubbo
+-----------
+name    query
+
+
+name: test
+----------
+name    query
+
+
+-- 连续查询,按照每小时聚合数据至新表
+> CREATE CONTINUOUS QUERY cq_hour ON dubbo RESAMPLE EVERY 1h FOR 1h BEGIN SELECT max(qps) as maxqps,mean(qps) as meanqps  INTO dubbo.autogen.follow_hour FROM dubbo.autogen.follow group by method,program,time(1h) END
+
+
+CREATE CONTINUOUS QUERY cq_minute ON dubbo RESAMPLE EVERY 1m FOR 1m BEGIN SELECT max(qps) as maxqps,mean(qps) as meanqps  INTO dubbo.autogen.follow_minute FROM dubbo.autogen.follow group by method,program,time(1m) END
+
+
+
+
+
+
+
+-- 查询
+> select max(qps),mean(qps) from follow group by method,program
+name: follow
+tags: method=object1, program=aucs
+time    max     mean
+----    ---     ----
+0       300     300
+
+name: follow
+tags: method=object1, program=crm
+time    max     mean
+----    ---     ----
+0       300     300
+
+name: follow
+tags: method=object2, program=aucs
+time    max     mean
+----    ---     ----
+0       500     344
+
+name: follow
+tags: method=object2, program=crm
+time    max     mean
+----    ---     ----
+0       800     530
+
+name: follow
+tags: method=object3, program=aucs
+time    max     mean
+----    ---     ----
+0       300     215
+
+name: follow
+tags: method=object3, program=crm
+time    max     mean
+----    ---     ----
+0       300     200
+
+name: follow
+tags: method=object4, program=aucs
+time    max     mean
+----    ---     ----
+0       400     270
+
+name: follow
+tags: method=object4, program=crm
+time    max     mean
+----    ---     ----
+0       400     295
+
+name: follow
+tags: method=object5, program=aucs
+time    max     mean
+----    ---     ----
+0       320     258
+
+name: follow
+tags: method=object5, program=crm
+time    max     mean
+----    ---     ----
+0       300     240
+
+
+
+[root@DB221 influxdb]# influx -database 'dubbo' -execute 'show series' -format 'csv'           
+key
+"follow,method=object1,program=aucs,runtime=100"
+"follow,method=object1,program=crm,runtime=100"
+"follow,method=object2,program=aucs,runtime=100"
+"follow,method=object2,program=aucs,runtime=120"
+"follow,method=object2,program=aucs,runtime=180"
+"follow,method=object2,program=aucs,runtime=230"
+"follow,method=object2,program=aucs,runtime=330"
+"follow,method=object2,program=crm,runtime=100"
+"follow,method=object2,program=crm,runtime=120"
+"follow,method=object2,program=crm,runtime=180"
+"follow,method=object2,program=crm,runtime=230"
+"follow,method=object2,program=crm,runtime=330"
+"follow,method=object3,program=aucs,runtime=100"
+"follow,method=object3,program=aucs,runtime=150"
+"follow,method=object3,program=crm,runtime=100"
+"follow,method=object3,program=crm,runtime=150"
+"follow,method=object4,program=aucs,runtime=100"
+"follow,method=object4,program=aucs,runtime=120"
+"follow,method=object4,program=aucs,runtime=180"
+"follow,method=object4,program=crm,runtime=100"
+"follow,method=object4,program=crm,runtime=120"
+"follow,method=object4,program=crm,runtime=180"
+"follow,method=object5,program=aucs,runtime=130"
+"follow,method=object5,program=aucs,runtime=160"
+"follow,method=object5,program=aucs,runtime=180"
+"follow,method=object5,program=aucs,runtime=320"
+"follow,method=object5,program=aucs,runtime=330"
+"follow,method=object5,program=crm,runtime=130"
+"follow,method=object5,program=crm,runtime=160"
+"follow,method=object5,program=crm,runtime=180"
+"follow,method=object5,program=crm,runtime=320"
+"follow,method=object5,program=crm,runtime=330"
+
+
+[root@DB221 influxdb]# influx -database 'dubbo' -execute 'show series' -format 'csv'|wc -l
+33
+
+
+[root@DB221 local]# rpm -ivh grafana-4.3.1-1.x86_64.rpm 
+warning: grafana-4.3.1-1.x86_64.rpm: Header V4 RSA/SHA1 Signature, key ID 24098cb6: NOKEY
+Preparing...                ########################################### [100%]
+   1:grafana                ########################################### [100%]
+### NOT starting grafana-server by default on bootup, please execute
+ sudo /sbin/chkconfig --add grafana-server
+### In order to start grafana-server, execute
+ sudo service grafana-server start
+POSTTRANS: Running script
+
+
+[root@DB221 local]# chkconfig --add grafana-server
+[root@DB221 local]# service grafana-server start
+Starting Grafana Server: ...                               [  OK  ]
+
+
+-- grafana 访问地址 
+http://188.188.23.221:3000/
+[root@DB221 sysconfig]# cat /etc/sysconfig/grafana-server
+GRAFANA_USER=grafana
+GRAFANA_GROUP=grafana
+GRAFANA_HOME=/usr/share/grafana
+LOG_DIR=/var/log/grafana
+DATA_DIR=/var/lib/grafana
+MAX_OPEN_FILES=10000
+CONF_DIR=/etc/grafana
+CONF_FILE=/etc/grafana/grafana.ini
+RESTART_ON_UPGRADE=true
+PLUGINS_DIR=/var/lib/grafana/plugins
+-- grafana 配置
+-- 配置data source
+-- 确保成功
+--创建dashboard
+
