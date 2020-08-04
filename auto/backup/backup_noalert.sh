@@ -8,6 +8,7 @@ hostip="192.168.2.220"
 remote_backup_server="192.168.2.221"
 
 #检测存活MySQL端口
+#port=3306
 ports=`netstat -ntpl |grep mysqld |awk '{print $4}' |awk -F":" '{print $(NF)}'`
 
 #定义备份日志
