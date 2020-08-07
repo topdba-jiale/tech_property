@@ -6,15 +6,23 @@ DB_USER="backup"
 DB_PASS="Backup@qunje"
 hostip="192.168.2.220"
 remote_backup_server="192.168.2.221"
+#指定需要备份的MySQL端口
+ports=3307
 
-#检测存活MySQL端口
-#port=3306
-ports=`netstat -ntpl |grep mysqld |awk '{print $4}' |awk -F":" '{print $(NF)}'`
+# 配置机器互信
+if [ $(grep -w "192.168.2.220" /root/.ssh/id_rsa.pub |wc -l) -lt 1  ];then
+	rm -rf ~/.ssh;ssh-keygen -t rsa -f ~/.ssh/id_rsa -P ""
+	ssh-copy-id -i ~/.ssh/id_rsa.pub root@${remote_backup_server}
+fi
+
+#如果需要备份所有MySQL实例端口
+#ports=`netstat -ntpl |grep mysqld |awk '{print $4}' |awk -F":" '{print $(NF)}'`
 
 #定义备份日志
 backuplog="/backup/backup.log"
 mysql=$(which mysql)
 
+#检测业务库，剔除非业务库
 for port in $ports ;do
 mycmd="$mysql -u$DB_USER -p$DB_PASS -P$port -h$hostip"
 DB_NAME=`$mycmd -e "show databases;" |sed '1,2d' |egrep -v "mysql|schema|test|sys"|awk BEGIN{RS=EOF}'{gsub(/\n/," ");print}'`
@@ -27,7 +35,7 @@ if [ ! -d "/backup/${DAY_NAME}" ]; then
   mkdir -p /backup/${DAY_NAME}/
 fi
 
-
+#指定MySQL可执行路径
 BIN_DIR="/usr/local/mysql/bin" 
 
 #保留最近60天备份文件
@@ -49,14 +57,14 @@ BEGINTIME=`date +"%Y-%m-%d %H:%M:%S"`
 # 备份开始时间，写入日志。
 echo "backup start at $(date +[%Y/%m/%d/%H:%M:%S])" >>$backuplog
 
-#备份数据库
+#备份数据库，--master-data=2 --single-transaction参数可保证备份数据一致性，和短暂锁等待。
 $BIN_DIR/mysqldump --default-character-set=utf8 --opt -u$DB_USER -p$DB_PASS -h$hostip -P$port --master-data=2 --single-transaction --triggers --routines --events --opt --databases $DB_NAME >/backup/${DAY_NAME}/${hostip}_${port}_${DATE_NAME}.sql 
 if [ "$?" -eq "0" ] ;then 
 	ENDTIME=`date +"%Y-%m-%d %H:%M:%S"`
 	begin_date=`date -d "$BEGINTIME" +%s`
 	end_date=`date -d "$ENDTIME" +%s`
 	spendtime=`expr $end_date - $begin_date`
-	
+	#成功完成备份，且耗时小于300秒
 	if [ $spendtime -le 300 ];then
 		echo "$hostip:$port [successful completion backup] at:$(date +[%Y/%m/%d/%H:%M:%S]),total cost:$spendtime seconds" >> $backuplog
         #传输备份完成的文件至远程服务器，前提远程服务器存在/backup 目录
@@ -75,3 +83,5 @@ else
 fi
 
 done 
+
+
