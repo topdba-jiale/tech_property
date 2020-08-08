@@ -32,9 +32,13 @@ gtid_mode=$(mysql -u$1 -p$2 -h127.0.0.1 -P$3 -B -N -e "show variables like 'gtid
 # 备份改造前（老）数据库
 if command -v mysqlpump >/dev/null 2>&1; then 
 	if [[ $gtid_mode == "ON" ]];then
-		mysqlpump -u$1 -p$2 -h127.0.0.1 -P$3 --events --triggers --complete-insert --add-drop-table --single-transaction --set-gtid-purged=OFF  --skip-definer -B $4 --parallel-schemas=2:$4 > $shell_path/backup_$4_pump_$backup_date.sql
+		if [[ $(mysqlpump  --version  |awk '{print $5}'  |awk -F '.' '{print $3}' |sed 's/\,//g') -ge 11 ]] ;then
+			mysqlpump -u$1 -p$2 -h127.0.0.1 -P$3 --events --triggers --complete-insert --add-drop-table --single-transaction --set-gtid-purged=OFF  --skip-definer -B $4 --parallel-schemas=2:$4 > $shell_path/backup_$4_pump_$backup_date.sql
+		else
+			mysqlpump -u$1 -p$2 -h127.0.0.1 -P$3 --events --triggers --complete-insert --add-drop-table --single-transaction --set-gtid-purged=OFF  --skip-definer -B $4 --default-parallelism=0 > $shell_path/backup_$4_pump_$backup_date.sql
+		fi
 	else
-		mysqlpump -u$1 -p$2 -h127.0.0.1 -P$3 --events --triggers --complete-insert --add-drop-table --single-transaction --skip-definer -B $4 --parallel-schemas=2:$4 > $shell_path/backup_$4_pump_$backup_date.sql
+		mysqlpump -u$1 -p$2 -h127.0.0.1 -P$3 --events --triggers --complete-insert --add-drop-table --single-transaction --skip-definer -B $4 --default-parallelism=0 > $shell_path/backup_$4_pump_$backup_date.sql
 	fi
 
 	if [ $? -ne 0 ];then
